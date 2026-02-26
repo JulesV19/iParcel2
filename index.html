@@ -833,9 +833,25 @@ map.on('click', (e) => {
 
     const feature = features[0];
     const props = feature.properties;
-    // L'ID de la parcelle correspond à la clé dans lineage.json
-    // On essaie dans l'ordre : la propriété id du feature MapLibre, puis les props communes
-    const parcelId = String(feature.id ?? props.ID_PARCEL ?? props.id ?? props.ID ?? `${props.CODE_CULTU}_${e.lngLat.lat.toFixed(5)}_${e.lngLat.lng.toFixed(5)}`);
+
+    // Debug : affiche toutes les propriétés dans la console pour identifier la bonne clé d'ID
+    console.log('[iParcel] feature.id =', feature.id);
+    console.log('[iParcel] feature.properties =', props);
+
+    // Cherche l'ID dans toutes les propriétés candidates (RPG français + génériques)
+    // Priorité : feature.id natif MVT > champs nommés explicitement > fallback coords
+    const parcelId = String(
+        feature.id                          // ID natif du feature MVT/PMTile
+        ?? props.ID_PARCEL
+        ?? props.id_parcel
+        ?? props.ID
+        ?? props.id
+        ?? props.NUMERO
+        ?? props.numero
+        ?? props.FID
+        ?? `${props.CODE_CULTU}_${e.lngLat.lat.toFixed(5)}_${e.lngLat.lng.toFixed(5)}`
+    );
+    console.log('[iParcel] parcelId résolu =', parcelId, '| dans lineage ?', !!(lineageData && lineageData[parcelId]));
     showDetails(e, parcelId, props);
 });
 
@@ -1569,10 +1585,12 @@ function renderHistory(parcelId, props) {
         return;
     }
 
-    // Lecture des clés compressées : c23 et l
-    const currentCultureCode = record["c23"] || props.CODE_CULTU || '—';
+    // Support des deux formats de clés :
+    // Format original : { culture_2023, lineage: { year: { culture, confidence, parent_id } } }
+    // Format compressé : { c23, l: { year: { c, cf, p } } }
+    const currentCultureCode = record["culture_2023"] || record["c23"] || props.CODE_CULTU || '—';
     const currentCropName = cropLabels[currentCultureCode] || currentCultureCode;
-    const lineage = record["l"] || {};
+    const lineage = record["lineage"] || record["l"] || {};
     const sortedYears = Object.keys(lineage).sort((a, b) => b - a);
 
     const currentEntry = `
@@ -1589,11 +1607,11 @@ function renderHistory(parcelId, props) {
 
     const historyEntries = sortedYears.map(y => {
         const entry = lineage[y];
-        // Clés compressées : c (culture), cf (confidence), p (parent_id)
-        const code = entry.c || '—';
+        // Support des deux formats : original { culture, confidence, parent_id } ou compressé { c, cf, p }
+        const code = entry.culture || entry.c || '—';
         const cropName = cropLabels[code] || code;
-        const confidence = entry.cf != null ? Math.round(entry.cf * 100) : null;
-        const parentId = entry.p || null;
+        const confidence = (entry.confidence ?? entry.cf) != null ? Math.round((entry.confidence ?? entry.cf) * 100) : null;
+        const parentId = entry.parent_id || entry.p || null;
 
         return `
             <div class="history-item">
