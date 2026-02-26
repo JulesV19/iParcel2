@@ -1171,7 +1171,7 @@ function ensureLayer(year) {
         map.addSource(srcId, {
             type: "vector",
             // Correction : ajout de pmtiles:// et remplacement de /blob/ par /resolve/
-            url: `pmtiles://https://huggingface.co/datasets/JulesV19/iparcel-data/resolve/main/${year}.pmtiles`
+            url: `pmtiles://https://huggingface.co/datasets/Juckles19/iparcel-public/resolve/main/${year}.pmtiles`
         });
     }
     if (!map.getLayer(lyrId)) {
