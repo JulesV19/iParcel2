@@ -835,11 +835,7 @@ map.on('click', (e) => {
     const props = feature.properties;
 
     // Debug : affiche toutes les propriétés dans la console pour identifier la bonne clé d'ID
-    console.log('[iParcel] feature.id =', feature.id);
-    console.log('[iParcel] feature.properties =', props);
-
-    // Cherche l'ID dans toutes les propriétés candidates (RPG français + génériques)
-    // Priorité : feature.id natif MVT > champs nommés explicitement > fallback coords
+    // ID confirmé : props.ID_PARCEL (ex: "8393489")
     const parcelId = String(
         feature.id                          // ID natif du feature MVT/PMTile
         ?? props.ID_PARCEL
