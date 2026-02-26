@@ -1063,7 +1063,7 @@ async function init() {
     updateMapColors();
 
     try {
-        const response = await fetch("lineage.json");
+        const response = await fetch("lineage_small.json");
         if (response.ok) lineageData = await response.json();
     } catch(e) {
         console.log("lineage.json non trouvé — mode démo activé.");
@@ -1539,11 +1539,9 @@ function renderWeatherChart(w) {
 function renderHistory(parcelId, props) {
     const list = document.getElementById('history-list');
     const currentYear = document.getElementById('year-select').value;
-
     const record = lineageData && lineageData[parcelId];
 
     if (!record) {
-        // Mode démo : parcelle non trouvée dans le lineage
         const cropName = cropLabels[props.CODE_CULTU] || props.CODE_CULTU || "Inconnu";
         list.innerHTML = `
             <div class="history-item">
@@ -1552,26 +1550,19 @@ function renderHistory(parcelId, props) {
                 <div class="parent-card">
                     <div style="font-weight:600;color:var(--text-main);">${cropName}</div>
                     <div style="font-size:0.75rem;color:var(--text-muted);margin-top:4px;">
-                        ${props.SURF_PARC ? parseFloat(props.SURF_PARC).toFixed(2) + ' ha' : '—'}
-                        · Campagne en cours
+                        ${props.SURF_PARC ? parseFloat(props.SURF_PARC).toFixed(2) + ' ha' : '—'} · Actuel
                     </div>
                 </div>
-            </div>
-            <div style="font-size:0.78rem;color:var(--text-muted);padding:8px 0;">
-                Aucun historique disponible pour cette parcelle (ID: ${parcelId}).
             </div>`;
         return;
     }
 
-    // ── Année courante (culture_2023 ou culture_{currentYear}) ──
-    const currentCultureCode = record[`culture_${currentYear}`] || record.culture_2023 || props.CODE_CULTU || '—';
+    // Lecture des clés compressées : c23 et l
+    const currentCultureCode = record["c23"] || props.CODE_CULTU || '—';
     const currentCropName = cropLabels[currentCultureCode] || currentCultureCode;
+    const lineage = record["l"] || {};
+    const sortedYears = Object.keys(lineage).sort((a, b) => b - a);
 
-    // ── Années historiques depuis record.lineage ──
-    const lineage = record.lineage || {};
-    const sortedYears = Object.keys(lineage).sort((a, b) => b - a); // décroissant
-
-    // Construire les entrées : année courante en premier, puis historique
     const currentEntry = `
         <div class="history-item">
             <div class="timeline-dot"></div>
@@ -1580,18 +1571,17 @@ function renderHistory(parcelId, props) {
                 <div style="font-weight:600;color:var(--text-main);">${currentCropName}</div>
                 <div style="font-size:0.75rem;color:var(--text-muted);margin-top:4px;">
                     ${props.SURF_PARC ? parseFloat(props.SURF_PARC).toFixed(2) + ' ha' : '—'}
-                    · Campagne en cours
                 </div>
             </div>
         </div>`;
 
     const historyEntries = sortedYears.map(y => {
         const entry = lineage[y];
-        // Le champ s'appelle "culture" (code culture) dans le JSON
-        const code = entry.culture || '—';
+        // Clés compressées : c (culture), cf (confidence), p (parent_id)
+        const code = entry.c || '—';
         const cropName = cropLabels[code] || code;
-        const confidence = entry.confidence != null ? Math.round(entry.confidence * 100) : null;
-        const parentId = entry.parent_id || null;
+        const confidence = entry.cf != null ? Math.round(entry.cf * 100) : null;
+        const parentId = entry.p || null;
 
         return `
             <div class="history-item">
@@ -1599,17 +1589,10 @@ function renderHistory(parcelId, props) {
                 <div class="year-badge">${y}</div>
                 <div class="parent-card">
                     <div style="font-weight:600;color:var(--text-main);">${cropName}</div>
-                    <div style="font-size:0.75rem;color:var(--text-muted);margin-top:4px;display:flex;gap:10px;flex-wrap:wrap;">
-                        ${parentId ? `<span>🆔 Parcelle parent : ${parentId}</span>` : ''}
-                    </div>
+                    ${parentId ? `<div style="font-size:0.7rem;color:var(--text-muted);">🆔 Parent: ${parentId}</div>` : ''}
                     ${confidence !== null ? `
-                    <div class="confidence-bar" style="margin-top:8px;">
-                        <div class="confidence-fill" style="width:${confidence}%"></div>
-                    </div>
-                    <div style="font-size:0.7rem;color:var(--text-muted);margin-top:3px;">
-                        Fiabilité : ${confidence}%
-                        ${confidence < 80 ? ' ⚠️' : confidence === 100 ? ' ✅' : ''}
-                    </div>` : ''}
+                    <div class="confidence-bar"><div class="confidence-fill" style="width:${confidence}%"></div></div>
+                    <div style="font-size:0.7rem;color:var(--text-muted);margin-top:3px;">Fiabilité: ${confidence}%</div>` : ''}
                 </div>
             </div>`;
     }).join('');
