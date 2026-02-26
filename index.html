@@ -758,44 +758,49 @@ loaderStep(10, 'Chargement de la carte');
 // --- 1. CONFIGURATION DU PROTOCOLE PMTILES ---
 // Cette partie DOIT être au tout début, avant de créer la carte.
 const protocol = new pmtiles.Protocol();
-maplibregl.addProtocol("pmtiles", (request) => {
-    return protocol.add(request);
-});
+maplibregl.addProtocol("pmtiles", protocol.tile.bind(protocol));
 
 // --- 2. INITIALISATION DE LA CARTE ---
 const map = new maplibregl.Map({
     container: 'map',
     style: {
         version: 8,
-        sources: {},
-        layers: [
-            {
-                id: "background",
-                type: "background",
-                paint: { "background-color": "#f9fafb" }
-            }
-        ]
+        sources: {
+            "basemap": { type: "raster", tiles: [basemaps[0].tiles], tileSize: 256 }
+        },
+        layers: [{ id: "basemap-layer", type: "raster", source: "basemap" }]
     },
-    center: [2.35, 48.85], // Paris par défaut
-    zoom: 12
+    center: [2.35, 48.85],
+    zoom: 12,
+    attributionControl: false
 });
 map.addControl(new maplibregl.NavigationControl(), 'bottom-right');
 loaderStep(30, 'Connexion aux tuiles');
 map.addControl(new maplibregl.ScaleControl({ maxWidth: 200 }), 'bottom-left');
 
-// FIX: toute la logique post-chargement est dans map.on('load')
 map.on('load', () => {
     loaderStep(60, 'Chargement des parcelles');
     mapReady = true;
     const year = document.getElementById('year-select').value;
-    ensureLayer(year);
+
+    try { ensureLayer(year); } catch(e) { console.warn('ensureLayer:', e); }
+
     loaderStep(80, 'Chargement des données');
     init().then(() => {
         loaderStep(95, 'Finalisation');
         updateStats();
-        setTimeout(hideLoader, 400);
+    });
+
+    // Masquer le loader dès que la carte est idle (tuiles rendues) OU après 6s max
+    const loaderTimeout = setTimeout(hideLoader, 6000);
+    map.once('idle', () => {
+        clearTimeout(loaderTimeout);
+        setTimeout(hideLoader, 300);
     });
 });
+
+// Sécurité supplémentaire : si map.on('load') ne se déclenche jamais (réseau KO)
+setTimeout(() => hideLoader(), 10000);
 
 // FIX: mise à jour des coordonnées en temps réel
 map.on('mousemove', (e) => {
