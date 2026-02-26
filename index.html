@@ -1074,7 +1074,7 @@ async function init() {
     updateMapColors();
 
     try {
-        const response = await fetch("lineage_small.json");
+        const response = await fetch("lineage.json");
         if (response.ok) lineageData = await response.json();
     } catch(e) {
         console.log("lineage.json non trouvé — mode démo activé.");
