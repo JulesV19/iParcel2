@@ -758,7 +758,7 @@ loaderStep(10, 'Chargement de la carte');
 // ── Map Init ──
 // ── Enregistrement du protocole PMTiles ──
 const protocol = new pmtiles.Protocol();
-maplibregl.addProtocol("pmtiles", protocol.tile.bind(protocol));
+maplibregl.addProtocol("pmtiles", protocol.add);
 
 const map = new maplibregl.Map({
     container: 'map',
