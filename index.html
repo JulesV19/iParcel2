@@ -1159,7 +1159,7 @@ function ensureLayer(year) {
         // Le protocole pmtiles:// est géré par la librairie pmtiles.js
         map.addSource(srcId, {
             type: "vector",
-            url: `pmtiles://tiles_output/${year}.pmtiles`
+            url: `https://huggingface.co/datasets/Juckles19/iparcel-data/blob/main/${year}.pmtiles`
         });
     }
     if (!map.getLayer(lyrId)) {
