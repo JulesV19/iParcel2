@@ -755,27 +755,30 @@ function hideLoader() {
 }
 loaderStep(10, 'Chargement de la carte');
 
-// ── Map Init ──
-// ── Enregistrement du protocole PMTiles ──
-// 1. On crée l'instance du protocole
+// --- 1. CONFIGURATION DU PROTOCOLE PMTILES ---
+// Cette partie DOIT être au tout début, avant de créer la carte.
 const protocol = new pmtiles.Protocol();
+maplibregl.addProtocol("pmtiles", (request) => {
+    return protocol.add(request);
+});
 
-// 2. IMPORTANT : On ajoute .bind(protocol) à la fin
-maplibregl.addProtocol("pmtiles", protocol.add.bind(protocol));
-
+// --- 2. INITIALISATION DE LA CARTE ---
 const map = new maplibregl.Map({
     container: 'map',
     style: {
         version: 8,
-        sources: {
-            "basemap": { type: "raster", tiles: [basemaps[0].tiles], tileSize: 256 }
-        },
-        layers: [{ id: "basemap-layer", type: "raster", source: "basemap" }]
+        sources: {},
+        layers: [
+            {
+                id: "background",
+                type: "background",
+                paint: { "background-color": "#f9fafb" }
+            }
+        ]
     },
-    center: [-3.29, 48.37], zoom: 12,
-    attributionControl: false
+    center: [2.35, 48.85], // Paris par défaut
+    zoom: 12
 });
-
 map.addControl(new maplibregl.NavigationControl(), 'bottom-right');
 loaderStep(30, 'Connexion aux tuiles');
 map.addControl(new maplibregl.ScaleControl({ maxWidth: 200 }), 'bottom-left');
