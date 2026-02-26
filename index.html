@@ -757,11 +757,11 @@ loaderStep(10, 'Chargement de la carte');
 
 // ── Map Init ──
 // ── Enregistrement du protocole PMTiles ──
-// 1. Initialiser le protocole (OBLIGATOIRE)
-let protocol = new pmtiles.Protocol();
+// 1. On crée l'instance du protocole
+const protocol = new pmtiles.Protocol();
 
-// 2. L'ajouter à MapLibre
-maplibregl.addProtocol("pmtiles", protocol.add);
+// 2. IMPORTANT : On ajoute .bind(protocol) à la fin
+maplibregl.addProtocol("pmtiles", protocol.add.bind(protocol));
 
 const map = new maplibregl.Map({
     container: 'map',
