@@ -1179,102 +1179,289 @@
 
         /* ── Auth Modal ── */
         .auth-overlay {
-            position: fixed; inset: 0; background: rgba(0,0,0,0.5);
-            display: flex; align-items: center; justify-content: center;
-            z-index: 9999; backdrop-filter: blur(4px);
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            backdrop-filter: blur(4px);
         }
-        .auth-overlay.hidden { display: none; }
+
+        .auth-overlay.hidden {
+            display: none;
+        }
+
         .auth-card {
-            background: white; border-radius: 16px; padding: 32px;
-            width: min(400px, 90vw); box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+            background: white;
+            border-radius: 16px;
+            padding: 32px;
+            width: min(400px, 90vw);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
         }
-        .auth-card h2 { margin: 0 0 8px; font-size: 1.3rem; }
-        .auth-card p { margin: 0 0 20px; color: var(--text-muted); font-size: 0.85rem; }
+
+        .auth-card h2 {
+            margin: 0 0 8px;
+            font-size: 1.3rem;
+        }
+
+        .auth-card p {
+            margin: 0 0 20px;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
         .auth-input {
-            width: 100%; padding: 10px 14px; border: 1.5px solid var(--border);
-            border-radius: 8px; font-size: 0.9rem; margin-bottom: 12px;
-            outline: none; transition: border-color 0.2s;
+            width: 100%;
+            padding: 10px 14px;
+            border: 1.5px solid var(--border);
+            border-radius: 8px;
+            font-size: 0.9rem;
+            margin-bottom: 12px;
+            outline: none;
+            transition: border-color 0.2s;
             box-sizing: border-box;
         }
-        .auth-input:focus { border-color: var(--accent); }
+
+        .auth-input:focus {
+            border-color: var(--accent);
+        }
+
         .auth-btn {
-            width: 100%; padding: 11px; border: none; border-radius: 8px;
-            background: var(--accent); color: white; font-weight: 700;
-            font-size: 0.9rem; cursor: pointer; transition: opacity 0.2s;
+            width: 100%;
+            padding: 11px;
+            border: none;
+            border-radius: 8px;
+            background: var(--accent);
+            color: white;
+            font-weight: 700;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: opacity 0.2s;
         }
-        .auth-btn:hover { opacity: 0.9; }
-        .auth-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .auth-btn:hover {
+            opacity: 0.9;
+        }
+
+        .auth-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
         .auth-toggle {
-            margin-top: 14px; text-align: center; font-size: 0.8rem; color: var(--text-muted);
+            margin-top: 14px;
+            text-align: center;
+            font-size: 0.8rem;
+            color: var(--text-muted);
         }
-        .auth-toggle a { color: var(--accent); cursor: pointer; font-weight: 600; }
-        .auth-error { color: #ef4444; font-size: 0.8rem; margin-bottom: 10px; min-height: 1.2em; }
-        .auth-skip { margin-top: 10px; text-align: center; }
-        .auth-skip a { color: var(--text-muted); font-size: 0.78rem; cursor: pointer; text-decoration: underline; }
+
+        .auth-toggle a {
+            color: var(--accent);
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .auth-error {
+            color: #ef4444;
+            font-size: 0.8rem;
+            margin-bottom: 10px;
+            min-height: 1.2em;
+        }
+
+        .auth-skip {
+            margin-top: 10px;
+            text-align: center;
+        }
+
+        .auth-skip a {
+            color: var(--text-muted);
+            font-size: 0.78rem;
+            cursor: pointer;
+            text-decoration: underline;
+        }
 
         /* ── User bar ── */
         .user-bar {
-            display: flex; align-items: center; gap: 8px; padding: 8px 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 14px;
             background: linear-gradient(135deg, #f0fdf4, #ecfdf5);
-            border: 1px solid #bbf7d0; border-radius: var(--radius-sm);
-            margin-bottom: 10px; font-size: 0.78rem;
+            border: 1px solid #bbf7d0;
+            border-radius: var(--radius-sm);
+            margin-bottom: 10px;
+            font-size: 0.78rem;
         }
-        .user-bar .user-email { font-weight: 600; color: var(--text-main); flex: 1; overflow: hidden; text-overflow: ellipsis; }
-        .user-bar button { font-size: 0.7rem; padding: 4px 10px; }
+
+        .user-bar .user-email {
+            font-weight: 600;
+            color: var(--text-main);
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .user-bar button {
+            font-size: 0.7rem;
+            padding: 4px 10px;
+        }
 
         /* ── Exploitation select mode ── */
         .select-mode-banner {
-            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
-            background: #1e40af; color: white; padding: 12px 24px;
-            border-radius: 12px; font-size: 0.85rem; font-weight: 600;
-            box-shadow: 0 8px 30px rgba(30,64,175,0.4);
-            z-index: 1000; display: flex; align-items: center; gap: 12px;
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1e40af;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            box-shadow: 0 8px 30px rgba(30, 64, 175, 0.4);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            gap: 12px;
         }
-        .select-mode-banner.hidden { display: none; }
+
+        .select-mode-banner.hidden {
+            display: none;
+        }
+
         .select-mode-banner button {
-            padding: 6px 14px; border-radius: 8px; border: none;
-            font-weight: 700; font-size: 0.78rem; cursor: pointer;
+            padding: 6px 14px;
+            border-radius: 8px;
+            border: none;
+            font-weight: 700;
+            font-size: 0.78rem;
+            cursor: pointer;
         }
-        .select-mode-banner .btn-done { background: #22c55e; color: white; }
-        .select-mode-banner .btn-cancel { background: rgba(255,255,255,0.2); color: white; }
+
+        .select-mode-banner .btn-done {
+            background: #22c55e;
+            color: white;
+        }
+
+        .select-mode-banner .btn-cancel {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+        }
 
         /* ── Dashboard exploitation ── */
         .dashboard-panel {
-            position: absolute; top: 0; right: 0; width: 420px; height: 100%;
-            background: white; box-shadow: -4px 0 20px rgba(0,0,0,0.1);
-            z-index: 500; overflow-y: auto; transform: translateX(100%);
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 420px;
+            height: 100%;
+            background: white;
+            box-shadow: -4px 0 20px rgba(0, 0, 0, 0.1);
+            z-index: 500;
+            overflow-y: auto;
+            transform: translateX(100%);
             transition: transform 0.3s ease;
         }
-        .dashboard-panel.open { transform: translateX(0); }
+
+        .dashboard-panel.open {
+            transform: translateX(0);
+        }
+
         .dashboard-header {
-            padding: 20px; border-bottom: 1px solid var(--border-light);
-            display: flex; align-items: center; justify-content: space-between;
+            padding: 20px;
+            border-bottom: 1px solid var(--border-light);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
         }
-        .dashboard-header h2 { margin: 0; font-size: 1.1rem; }
-        .dashboard-body { padding: 16px; }
+
+        .dashboard-header h2 {
+            margin: 0;
+            font-size: 1.1rem;
+        }
+
+        .dashboard-body {
+            padding: 16px;
+        }
+
         .dash-stat-grid {
-            display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 16px;
         }
+
         .dash-stat {
-            background: var(--bg-card); border: 1px solid var(--border-light);
-            border-radius: var(--radius-sm); padding: 14px; text-align: center;
+            background: var(--bg-card);
+            border: 1px solid var(--border-light);
+            border-radius: var(--radius-sm);
+            padding: 14px;
+            text-align: center;
         }
-        .dash-stat .ds-value { font-size: 1.4rem; font-weight: 800; color: var(--accent-dark); }
-        .dash-stat .ds-label { font-size: 0.7rem; color: var(--text-muted); margin-top: 4px; }
+
+        .dash-stat .ds-value {
+            font-size: 1.4rem;
+            font-weight: 800;
+            color: var(--accent-dark);
+        }
+
+        .dash-stat .ds-label {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
         .parcel-list-item {
-            display: flex; align-items: center; gap: 10px; padding: 10px;
-            border: 1px solid var(--border-light); border-radius: 8px; margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            border: 1px solid var(--border-light);
+            border-radius: 8px;
+            margin-bottom: 6px;
             transition: background 0.15s;
         }
-        .parcel-list-item:hover { background: #f8fafc; }
-        .parcel-list-item .pli-color { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
-        .parcel-list-item .pli-info { flex: 1; min-width: 0; }
-        .parcel-list-item .pli-name { font-weight: 600; font-size: 0.82rem; }
-        .parcel-list-item .pli-meta { font-size: 0.68rem; color: var(--text-muted); }
+
+        .parcel-list-item:hover {
+            background: #f8fafc;
+        }
+
+        .parcel-list-item .pli-color {
+            width: 10px;
+            height: 10px;
+            border-radius: 3px;
+            flex-shrink: 0;
+        }
+
+        .parcel-list-item .pli-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .parcel-list-item .pli-name {
+            font-weight: 600;
+            font-size: 0.82rem;
+        }
+
+        .parcel-list-item .pli-meta {
+            font-size: 0.68rem;
+            color: var(--text-muted);
+        }
+
         .parcel-list-item .pli-remove {
-            width: 24px; height: 24px; border-radius: 50%; border: none;
-            background: #fee2e2; color: #ef4444; cursor: pointer; font-size: 0.8rem;
-            display: flex; align-items: center; justify-content: center;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            border: none;
+            background: #fee2e2;
+            color: #ef4444;
+            cursor: pointer;
+            font-size: 0.8rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .skeleton {
@@ -1737,8 +1924,10 @@
             <button class="top-btn" id="btn-screenshot" onclick="takeScreenshot()">📸 Capture</button>
             <button class="top-btn" id="btn-basemap" onclick="cycleBasemap()">🗺️ Fond</button>
             <span style="width:1px;height:24px;background:var(--border);margin:0 4px;"></span>
-            <button class="top-btn" id="btn-select-mode" onclick="toggleSelectMode()" title="Sélectionner des parcelles pour votre exploitation">🏠 Exploitation</button>
-            <button class="top-btn" id="btn-dashboard" onclick="toggleDashboard()" title="Voir le dashboard">📊 Dashboard</button>
+            <button class="top-btn" id="btn-select-mode" onclick="toggleSelectMode()"
+                title="Sélectionner des parcelles pour votre exploitation">🏠 Exploitation</button>
+            <button class="top-btn" id="btn-dashboard" onclick="toggleDashboard()" title="Voir le dashboard">📊
+                Dashboard</button>
             <button class="top-btn" id="btn-auth" onclick="showAuthModal()">👤 Connexion</button>
         </div>
     </div>
@@ -1750,7 +1939,8 @@
             <p id="auth-subtitle">Connectez-vous pour sauvegarder votre exploitation</p>
             <div class="auth-error" id="auth-error"></div>
             <input class="auth-input" id="auth-email" type="email" placeholder="Email" autocomplete="email">
-            <input class="auth-input" id="auth-password" type="password" placeholder="Mot de passe" autocomplete="current-password">
+            <input class="auth-input" id="auth-password" type="password" placeholder="Mot de passe"
+                autocomplete="current-password">
             <button class="auth-btn" id="auth-submit" onclick="submitAuth()">Se connecter</button>
             <div class="auth-toggle" id="auth-toggle">
                 Pas encore de compte ? <a onclick="switchAuthMode()">Créer un compte</a>
@@ -1764,7 +1954,8 @@
     <!-- Select Mode Banner -->
     <div class="select-mode-banner hidden" id="select-banner">
         <span>🏠 Mode sélection — Cliquez sur les parcelles à ajouter</span>
-        <span id="select-count" style="background:rgba(255,255,255,0.2);padding:3px 10px;border-radius:6px;">0 / 200</span>
+        <span id="select-count" style="background:rgba(255,255,255,0.2);padding:3px 10px;border-radius:6px;">0 /
+            200</span>
         <button class="btn-done" onclick="finishSelectMode()">✓ Terminer</button>
         <button class="btn-cancel" onclick="toggleSelectMode()">✕ Annuler</button>
     </div>
@@ -1786,7 +1977,8 @@
             <div id="dash-alerts" style="margin-bottom:16px;"></div>
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
                 <span style="font-weight:700;font-size:0.85rem;">Parcelles</span>
-                <button class="top-btn" onclick="toggleSelectMode()" style="font-size:0.72rem;padding:4px 10px;">+ Ajouter</button>
+                <button class="top-btn" onclick="toggleSelectMode()" style="font-size:0.72rem;padding:4px 10px;">+
+                    Ajouter</button>
             </div>
             <div id="dash-parcel-list"></div>
         </div>
@@ -2825,7 +3017,7 @@
         // ── Bucket loader with cache ──
         async function loadBucket(bucketId) {
             if (bucketCache[bucketId]) return bucketCache[bucketId];
-            const url = `https://huggingface.co/datasets/Juckles19/iparcel-public/resolve/main/lineage/${bucketId}.json`;
+            const url = `https://huggingface.co/datasets/Juckles19/iparcel-public/resolve/main/${bucketId}.json`;
             try {
                 const response = await fetch(url);
                 if (!response.ok) return null;
@@ -3481,13 +3673,13 @@
             </div>
             <div class="heatmap-row">
                 ${yearsList.map(y => {
-                    const isNow = (y === "2023");
-                    const cultCode = isNow ? (record.c || record.c23) : (lineage[y]?.c || null);
-                    const group = isNow ? (record.g || record.g23) : (lineage[y]?.g || '');
-                    const color = cultCode ? getCultureColor(group) : '#e2e8f0';
-                    const name = cropLabels[cultCode] || cultCode || 'Inconnu';
-                    return '<div class="heatmap-cell" style="background:' + color + '" title="' + y + ' : ' + name + '"></div>';
-                }).join('')}
+                const isNow = (y === "2023");
+                const cultCode = isNow ? (record.c || record.c23) : (lineage[y]?.c || null);
+                const group = isNow ? (record.g || record.g23) : (lineage[y]?.g || '');
+                const color = cultCode ? getCultureColor(group) : '#e2e8f0';
+                const name = cropLabels[cultCode] || cultCode || 'Inconnu';
+                return '<div class="heatmap-cell" style="background:' + color + '" title="' + y + ' : ' + name + '"></div>';
+            }).join('')}
             </div>
         </div>`;
         }
@@ -3587,10 +3779,12 @@
                 });
 
                 // Outline de la parcelle actuelle
-                miniMap.addSource('parcel-outline', { type: 'geojson', data: {
-                    type: 'FeatureCollection',
-                    features: [{ type: 'Feature', geometry: feature.geometry, properties: {} }]
-                }});
+                miniMap.addSource('parcel-outline', {
+                    type: 'geojson', data: {
+                        type: 'FeatureCollection',
+                        features: [{ type: 'Feature', geometry: feature.geometry, properties: {} }]
+                    }
+                });
                 miniMap.addLayer({
                     id: 'outline-line', type: 'line', source: 'parcel-outline',
                     paint: { 'line-color': '#000', 'line-width': 2 }
@@ -3732,8 +3926,8 @@
         // ═══════════════════════════════════════════════════════════
 
         // ⚠️ REMPLACER par vos clés Supabase
-        const SUPABASE_URL = 'https://YOUR_PROJECT.supabase.co';
-        const SUPABASE_ANON_KEY = 'YOUR_ANON_KEY';
+        const SUPABASE_URL = 'https://ajunaltvnoagvuqosgov.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFqdW5hbHR2bm9hZ3Z1cW9zZ292Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIyMTM2MTYsImV4cCI6MjA4Nzc4OTYxNn0.lUBd7iDzmajikHWCRmYrF3yTnc-QMdmJf1rUWzdqOSk';
 
         const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -3816,7 +4010,7 @@
                 errorEl.style.color = '#ef4444';
                 errorEl.textContent = msg.includes('Invalid login') ? 'Email ou mot de passe incorrect'
                     : msg.includes('already registered') ? 'Cet email est déjà utilisé'
-                    : msg;
+                        : msg;
             }
             btn.disabled = false;
             btn.textContent = authMode === 'login' ? 'Se connecter' : 'Créer un compte';
