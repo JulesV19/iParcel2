@@ -12,6 +12,7 @@
     <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap"
         rel="stylesheet">
     <style>
@@ -1176,6 +1177,106 @@
             box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1);
         }
 
+        /* ── Auth Modal ── */
+        .auth-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+            display: flex; align-items: center; justify-content: center;
+            z-index: 9999; backdrop-filter: blur(4px);
+        }
+        .auth-overlay.hidden { display: none; }
+        .auth-card {
+            background: white; border-radius: 16px; padding: 32px;
+            width: min(400px, 90vw); box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+        }
+        .auth-card h2 { margin: 0 0 8px; font-size: 1.3rem; }
+        .auth-card p { margin: 0 0 20px; color: var(--text-muted); font-size: 0.85rem; }
+        .auth-input {
+            width: 100%; padding: 10px 14px; border: 1.5px solid var(--border);
+            border-radius: 8px; font-size: 0.9rem; margin-bottom: 12px;
+            outline: none; transition: border-color 0.2s;
+            box-sizing: border-box;
+        }
+        .auth-input:focus { border-color: var(--accent); }
+        .auth-btn {
+            width: 100%; padding: 11px; border: none; border-radius: 8px;
+            background: var(--accent); color: white; font-weight: 700;
+            font-size: 0.9rem; cursor: pointer; transition: opacity 0.2s;
+        }
+        .auth-btn:hover { opacity: 0.9; }
+        .auth-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .auth-toggle {
+            margin-top: 14px; text-align: center; font-size: 0.8rem; color: var(--text-muted);
+        }
+        .auth-toggle a { color: var(--accent); cursor: pointer; font-weight: 600; }
+        .auth-error { color: #ef4444; font-size: 0.8rem; margin-bottom: 10px; min-height: 1.2em; }
+        .auth-skip { margin-top: 10px; text-align: center; }
+        .auth-skip a { color: var(--text-muted); font-size: 0.78rem; cursor: pointer; text-decoration: underline; }
+
+        /* ── User bar ── */
+        .user-bar {
+            display: flex; align-items: center; gap: 8px; padding: 8px 14px;
+            background: linear-gradient(135deg, #f0fdf4, #ecfdf5);
+            border: 1px solid #bbf7d0; border-radius: var(--radius-sm);
+            margin-bottom: 10px; font-size: 0.78rem;
+        }
+        .user-bar .user-email { font-weight: 600; color: var(--text-main); flex: 1; overflow: hidden; text-overflow: ellipsis; }
+        .user-bar button { font-size: 0.7rem; padding: 4px 10px; }
+
+        /* ── Exploitation select mode ── */
+        .select-mode-banner {
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+            background: #1e40af; color: white; padding: 12px 24px;
+            border-radius: 12px; font-size: 0.85rem; font-weight: 600;
+            box-shadow: 0 8px 30px rgba(30,64,175,0.4);
+            z-index: 1000; display: flex; align-items: center; gap: 12px;
+        }
+        .select-mode-banner.hidden { display: none; }
+        .select-mode-banner button {
+            padding: 6px 14px; border-radius: 8px; border: none;
+            font-weight: 700; font-size: 0.78rem; cursor: pointer;
+        }
+        .select-mode-banner .btn-done { background: #22c55e; color: white; }
+        .select-mode-banner .btn-cancel { background: rgba(255,255,255,0.2); color: white; }
+
+        /* ── Dashboard exploitation ── */
+        .dashboard-panel {
+            position: absolute; top: 0; right: 0; width: 420px; height: 100%;
+            background: white; box-shadow: -4px 0 20px rgba(0,0,0,0.1);
+            z-index: 500; overflow-y: auto; transform: translateX(100%);
+            transition: transform 0.3s ease;
+        }
+        .dashboard-panel.open { transform: translateX(0); }
+        .dashboard-header {
+            padding: 20px; border-bottom: 1px solid var(--border-light);
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .dashboard-header h2 { margin: 0; font-size: 1.1rem; }
+        .dashboard-body { padding: 16px; }
+        .dash-stat-grid {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px;
+        }
+        .dash-stat {
+            background: var(--bg-card); border: 1px solid var(--border-light);
+            border-radius: var(--radius-sm); padding: 14px; text-align: center;
+        }
+        .dash-stat .ds-value { font-size: 1.4rem; font-weight: 800; color: var(--accent-dark); }
+        .dash-stat .ds-label { font-size: 0.7rem; color: var(--text-muted); margin-top: 4px; }
+        .parcel-list-item {
+            display: flex; align-items: center; gap: 10px; padding: 10px;
+            border: 1px solid var(--border-light); border-radius: 8px; margin-bottom: 6px;
+            transition: background 0.15s;
+        }
+        .parcel-list-item:hover { background: #f8fafc; }
+        .parcel-list-item .pli-color { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+        .parcel-list-item .pli-info { flex: 1; min-width: 0; }
+        .parcel-list-item .pli-name { font-weight: 600; font-size: 0.82rem; }
+        .parcel-list-item .pli-meta { font-size: 0.68rem; color: var(--text-muted); }
+        .parcel-list-item .pli-remove {
+            width: 24px; height: 24px; border-radius: 50%; border: none;
+            background: #fee2e2; color: #ef4444; cursor: pointer; font-size: 0.8rem;
+            display: flex; align-items: center; justify-content: center;
+        }
+
         .skeleton {
             background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
             background-size: 200% 100%;
@@ -1635,6 +1736,59 @@
             <button class="top-btn" id="btn-compare" onclick="toggleCompare()">🔄 Comparer</button>
             <button class="top-btn" id="btn-screenshot" onclick="takeScreenshot()">📸 Capture</button>
             <button class="top-btn" id="btn-basemap" onclick="cycleBasemap()">🗺️ Fond</button>
+            <span style="width:1px;height:24px;background:var(--border);margin:0 4px;"></span>
+            <button class="top-btn" id="btn-select-mode" onclick="toggleSelectMode()" title="Sélectionner des parcelles pour votre exploitation">🏠 Exploitation</button>
+            <button class="top-btn" id="btn-dashboard" onclick="toggleDashboard()" title="Voir le dashboard">📊 Dashboard</button>
+            <button class="top-btn" id="btn-auth" onclick="showAuthModal()">👤 Connexion</button>
+        </div>
+    </div>
+
+    <!-- Auth Modal -->
+    <div class="auth-overlay hidden" id="auth-overlay">
+        <div class="auth-card">
+            <h2 id="auth-title">Connexion</h2>
+            <p id="auth-subtitle">Connectez-vous pour sauvegarder votre exploitation</p>
+            <div class="auth-error" id="auth-error"></div>
+            <input class="auth-input" id="auth-email" type="email" placeholder="Email" autocomplete="email">
+            <input class="auth-input" id="auth-password" type="password" placeholder="Mot de passe" autocomplete="current-password">
+            <button class="auth-btn" id="auth-submit" onclick="submitAuth()">Se connecter</button>
+            <div class="auth-toggle" id="auth-toggle">
+                Pas encore de compte ? <a onclick="switchAuthMode()">Créer un compte</a>
+            </div>
+            <div class="auth-skip">
+                <a onclick="hideAuthModal()">Continuer sans compte →</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Select Mode Banner -->
+    <div class="select-mode-banner hidden" id="select-banner">
+        <span>🏠 Mode sélection — Cliquez sur les parcelles à ajouter</span>
+        <span id="select-count" style="background:rgba(255,255,255,0.2);padding:3px 10px;border-radius:6px;">0 / 200</span>
+        <button class="btn-done" onclick="finishSelectMode()">✓ Terminer</button>
+        <button class="btn-cancel" onclick="toggleSelectMode()">✕ Annuler</button>
+    </div>
+
+    <!-- Dashboard Panel -->
+    <div class="dashboard-panel" id="dashboard-panel">
+        <div class="dashboard-header">
+            <h2>🏠 Mon exploitation</h2>
+            <button class="top-btn" onclick="toggleDashboard()" style="padding:6px 10px;">✕</button>
+        </div>
+        <div class="dashboard-body">
+            <div id="dash-user-bar"></div>
+            <input class="auth-input" id="exploitation-name" placeholder="Nom de l'exploitation"
+                style="margin-bottom:14px;font-weight:600;" onchange="renameExploitation(this.value)">
+            <div class="dash-stat-grid" id="dash-stats"></div>
+            <div id="dash-rotation-chart" style="margin-bottom:16px;">
+                <canvas id="dash-culture-chart" height="180"></canvas>
+            </div>
+            <div id="dash-alerts" style="margin-bottom:16px;"></div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+                <span style="font-weight:700;font-size:0.85rem;">Parcelles</span>
+                <button class="top-btn" onclick="toggleSelectMode()" style="font-size:0.72rem;padding:4px 10px;">+ Ajouter</button>
+            </div>
+            <div id="dash-parcel-list"></div>
         </div>
     </div>
 
@@ -2003,10 +2157,8 @@
             const feature = features[0];
             const props = feature.properties;
 
-            // Debug : affiche toutes les propriétés dans la console pour identifier la bonne clé d'ID
-            // ID confirmé : props.ID_PARCEL (ex: "8393489")
             const parcelId = String(
-                feature.id                          // ID natif du feature MVT/PMTile
+                feature.id
                 ?? props.ID_PARCEL
                 ?? props.id_parcel
                 ?? props.ID
@@ -2017,6 +2169,13 @@
                 ?? `${props.CODE_CULTU}_${e.lngLat.lat.toFixed(5)}_${e.lngLat.lng.toFixed(5)}`
             );
             console.log('[iParcel] parcelId résolu =', parcelId, '| dans lineage ?', !!(lineageData && lineageData[parcelId]));
+
+            // ── Select mode: add parcel to exploitation ──
+            if (selectMode && currentUser && currentExploitation) {
+                addParcelToExploitation(parcelId, props, e.lngLat);
+                return;
+            }
+
             highlightFeature(feature);
             showDetails(e, parcelId, props);
         });
@@ -2665,7 +2824,7 @@
         // ── Bucket loader with cache ──
         async function loadBucket(bucketId) {
             if (bucketCache[bucketId]) return bucketCache[bucketId];
-            const url = `https://huggingface.co/datasets/Juckles19/iparcel-public/resolve/main/lineage/${bucketId}.json`;
+            const url = `https://huggingface.co/datasets/Juckles19/iparcel-public/resolve/main/${bucketId}.json`;
             try {
                 const response = await fetch(url);
                 if (!response.ok) return null;
@@ -2681,35 +2840,109 @@
         // ── Parcel Details — single fetch, pre-calculated lineage ──
         async function showDetails(e, parcelId, props) {
             const year = document.getElementById('year-select').value;
+            const compositeId = `${year}_${parcelId}`;
             currentParcelId = parcelId;
 
-            console.log(`[iParcel] Recherche lineage : ${parcelId}`);
+            console.log(`[iParcel] Recherche : ${compositeId}`);
 
             document.getElementById('parcel-name').innerHTML = "Chargement...";
             toggleSidebar(true);
 
             try {
-                // Single fetch: bucket = 2 derniers chiffres de l'id_parcel
-                const bucket = parcelId.slice(-2).padStart(2, '0');
+                // Bucket = 2 derniers chiffres du compositeId (= de parcelId)
+                const bucket = compositeId.slice(-2);
                 const data = await loadBucket(bucket);
 
-                // Record is pre-calculated with full lineage
-                let record = data ? data[parcelId] : null;
+                const parcelInfo = data && data.parcelles ? data.parcelles[compositeId] : null;
 
-                if (record) {
-                    // Normalize: ensure both .l and .lineage exist
-                    if (!record.lineage && record.l) record.lineage = record.l;
-                    if (!record.l && record.lineage) record.l = record.lineage;
-                    if (!record.lineage) record.lineage = {};
-                    if (!record.c) record.c = record.c23 || props.CODE_CULTU;
-                    if (!record.g) record.g = record.g23 || props.CODE_GROUP;
+                // Build full lineage by walking parent chain within the bucket
+                let record = null;
+                if (parcelInfo) {
+                    const lineage = {};
+                    let currentUid = compositeId;
+                    const visited = new Set([currentUid]);
+
+                    for (let depth = 0; depth < 15; depth++) {
+                        const fil = data.filiations && data.filiations[currentUid];
+                        if (!fil || !fil.parents || fil.parents.length === 0) break;
+
+                        // Best parent (highest overlap)
+                        const best = fil.parents.reduce((a, b) => b.pct > a.pct ? b : a);
+                        const parentUid = best.uid;
+                        if (visited.has(parentUid)) break;
+                        visited.add(parentUid);
+
+                        const parentYear = parentUid.split('_')[0];
+                        const parentIdParcel = parentUid.split('_').slice(1).join('_');
+
+                        // Look up parent info — may be in same bucket or different
+                        let parentInfo = data.parcelles ? data.parcelles[parentUid] : null;
+                        if (!parentInfo) {
+                            // Parent is in a different bucket
+                            const parentBucket = parentUid.slice(-2);
+                            const parentData = await loadBucket(parentBucket);
+                            parentInfo = parentData && parentData.parcelles ? parentData.parcelles[parentUid] : null;
+                            // Also check filiations in parent bucket for next iteration
+                            if (parentData && parentData.filiations && parentData.filiations[parentUid]) {
+                                // Merge parent filiations into data for chain walking
+                                if (!data.filiations) data.filiations = {};
+                                data.filiations[parentUid] = parentData.filiations[parentUid];
+                            }
+                        }
+
+                        lineage[parentYear] = {
+                            c: parentInfo ? parentInfo.c : '?',
+                            g: parentInfo ? parentInfo.g : '',
+                            s: parentInfo ? parentInfo.s : null,
+                            cf: best.pct,
+                            p: parentIdParcel,
+                        };
+
+                        // Find siblings (other children of same parent)
+                        // stored later in record.sib
+
+                        currentUid = parentUid;
+                    }
+
+                    // Build siblings from filiations (other children of each parent)
+                    const siblings = {};
+                    for (const [yr, entry] of Object.entries(lineage)) {
+                        const parentUid = `${yr}_${entry.p}`;
+                        const parentFil = data.filiations && data.filiations[parentUid];
+                        if (parentFil && parentFil.children && parentFil.children.length > 1) {
+                            const sibs = [];
+                            for (const child of parentFil.children) {
+                                const childId = child.uid.split('_').slice(1).join('_');
+                                if (childId === parcelId) continue;
+                                const childInfo = data.parcelles ? data.parcelles[child.uid] : null;
+                                sibs.push({
+                                    id: childId,
+                                    c: childInfo ? childInfo.c : '?',
+                                    g: childInfo ? childInfo.g : '',
+                                    cf: child.pct,
+                                });
+                            }
+                            if (sibs.length > 0) siblings[yr] = sibs;
+                        }
+                    }
+
+                    record = {
+                        ...parcelInfo,
+                        c: parcelInfo.c || props.CODE_CULTU,
+                        g: parcelInfo.g || props.CODE_GROUP,
+                        c23: parcelInfo.c || props.CODE_CULTU,
+                        g23: parcelInfo.g || props.CODE_GROUP,
+                        lineage: lineage,
+                        l: lineage,
+                        sib: siblings,
+                    };
                 }
 
-                // Store in lineageData for other functions (minimap, legend, etc.)
+                // Store in lineageData
                 if (!lineageData) lineageData = {};
                 if (record) lineageData[parcelId] = record;
 
-                // Build parentIndex from lineage + siblings for this parcel
+                // Build parentIndex
                 if (!parentIndex) parentIndex = {};
                 if (record) {
                     const lin = record.lineage || {};
@@ -2720,9 +2953,7 @@
                             if (!parentIndex[key].includes(parcelId)) parentIndex[key].push(parcelId);
                         }
                     }
-                    // Index siblings
-                    const siblings = record.sib || {};
-                    for (const [yr, sibs] of Object.entries(siblings)) {
+                    for (const [yr, sibs] of Object.entries(record.sib || {})) {
                         const parentId = lin[yr]?.p;
                         if (parentId) {
                             const key = `${parentId}_${yr}`;
@@ -2741,9 +2972,7 @@
                 const lineage = record ? (record.lineage || {}) : {};
                 const lineageYears = Object.keys(lineage);
                 const yearsTracked = lineageYears.length > 0 ? lineageYears.length + 1 : 1;
-                const children = record ? (record.ch || {}) : {};
                 const siblings = record ? (record.sib || {}) : {};
-                const hasChildren = Object.keys(children).length > 0;
                 const hasSiblings = Object.keys(siblings).length > 0;
 
                 document.getElementById('parcel-name').innerHTML = `${cropName} <span class="culture-badge">${groupName}</span>`;
@@ -2754,20 +2983,15 @@
             <div class="info-card"><div class="ic-icon">📅</div><div class="ic-value">${yearsTracked} an${yearsTracked > 1 ? 's' : ''}</div><div class="ic-label">Historique</div></div>
             <div class="info-card"><div class="ic-icon">🌾</div><div class="ic-value">${props.CODE_CULTU || '—'}</div><div class="ic-label">Code culture</div></div>
             ${hasSiblings ? `<div class="info-card"><div class="ic-icon">✂️</div><div class="ic-value">${Object.values(siblings).flat().length}</div><div class="ic-label">Sœurs</div></div>` : ''}
-            ${hasChildren ? `<div class="info-card"><div class="ic-icon">🌱</div><div class="ic-value">${Object.values(children).flat().length}</div><div class="ic-label">Descendantes</div></div>` : ''}
         `;
 
-                // Météo
                 const w = await fetchWeather(e.lngLat.lat, e.lngLat.lng, year);
                 if (w) renderWeatherChart(w);
 
-                // Historique
                 renderHistoryWithRecord(parcelId, props, record);
 
                 if (highlightedFeature) {
-                    // Heatmap: use lineage from record instead of old bucket filiations
                     renderSpatialHeatmap(parcelId, highlightedFeature, record);
-                    // Mini-map
                     initParcelViz(parcelId, highlightedFeature, props, record);
                 }
 
@@ -3013,6 +3237,57 @@
             return { score, label, level, unique: unique.size, total: valid.length };
         }
         let spatialHeatmapMap = null;
+
+        function renderRotationScore(scoreData) {
+            const container = document.getElementById('rotation-score');
+            if (!container) return;
+            if (!scoreData || scoreData.total < 2) { container.innerHTML = ''; return; }
+            const cardClass = scoreData.level === 'good' ? '' : scoreData.level === 'bad' ? ' mono' : ' moderate';
+            const pct = Math.min(100, scoreData.score * 10);
+            const strokeColor = scoreData.level === 'good' ? '#10b981' : scoreData.level === 'bad' ? '#ef4444' : '#f59e0b';
+            const circumference = 2 * Math.PI * 20;
+            const offset = circumference - (pct / 100) * circumference;
+            container.innerHTML = `
+        <div class="rotation-score-card${cardClass}">
+            <div class="rotation-header">
+                <div>
+                    <div class="rotation-label">Diversité des cultures</div>
+                    <div style="font-size:0.85rem;font-weight:600;color:var(--text-main);margin-top:4px;">
+                        ${scoreData.unique} culture${scoreData.unique > 1 ? 's' : ''} différente${scoreData.unique > 1 ? 's' : ''} sur ${scoreData.total} ans
+                    </div>
+                </div>
+                <div style="display:flex;flex-direction:column;align-items:center;">
+                    <div class="rotation-score-ring">
+                        <svg width="52" height="52" viewBox="0 0 52 52">
+                            <circle cx="26" cy="26" r="20" fill="none" stroke="#e2e8f0" stroke-width="5"/>
+                            <circle cx="26" cy="26" r="20" fill="none" stroke="${strokeColor}" stroke-width="5"
+                                stroke-dasharray="${circumference}" stroke-dashoffset="${offset}"
+                                stroke-linecap="round" style="transition:stroke-dashoffset 1s ease"/>
+                        </svg>
+                        <div class="score-text">${scoreData.score}</div>
+                    </div>
+                    <span class="rotation-badge ${scoreData.level}">${scoreData.label}</span>
+                </div>
+            </div>
+        </div>`;
+        }
+
+        function renderTimelineStrip(entries) {
+            const container = document.getElementById('timeline-strip-container');
+            if (!container) return;
+            if (!entries || entries.length < 2) { container.innerHTML = ''; return; }
+            const cells = entries.map(e => {
+                const bg = e.cultureGroup ? getCultureColor(e.cultureGroup) : '#cbd5e1';
+                const cls = e.isCurrent ? ' current' : (e.empty ? ' empty' : '');
+                const code = e.cultureCode || '?';
+                return `<div class="strip-cell${cls}" style="background:${e.empty ? '' : bg}"
+                    title="${e.year}: ${cropLabels[code] || code}${e.confidence != null ? ' (fiabilité ' + Math.round(e.confidence * 100) + '%)' : ''}">
+                    <span class="strip-year">${String(e.year).slice(2)}</span>
+                    <span class="strip-code">${code}</span>
+                </div>`;
+            }).join('');
+            container.innerHTML = `<div class="timeline-strip">${cells}</div>`;
+        }
 
         function renderHistoryWithRecord(parcelId, props, record) {
             const list = document.getElementById('history-list');
@@ -3450,6 +3725,419 @@
                 switchMiniMapYear();
             }, 1200);
         }
+
+        // ═══════════════════════════════════════════════════════════
+        // ── SUPABASE — AUTH + EXPLOITATION ──
+        // ═══════════════════════════════════════════════════════════
+
+        // ⚠️ REMPLACER par vos clés Supabase
+        const SUPABASE_URL = 'https://ajunaltvnoagvuqosgov.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFqdW5hbHR2bm9hZ3Z1cW9zZ292Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIyMTM2MTYsImV4cCI6MjA4Nzc4OTYxNn0.lUBd7iDzmajikHWCRmYrF3yTnc-QMdmJf1rUWzdqOSk';
+
+        const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        let currentUser = null;
+        let currentExploitation = null;
+        let exploitationParcelles = [];
+        let selectMode = false;
+        let authMode = 'login'; // 'login' or 'register'
+        let dashCultureChart = null;
+
+        // ── Auth ──
+        async function initAuth() {
+            const { data: { session } } = await sb.auth.getSession();
+            if (session) {
+                currentUser = session.user;
+                onAuthSuccess();
+            }
+            sb.auth.onAuthStateChange((_event, session) => {
+                currentUser = session?.user || null;
+                updateAuthUI();
+            });
+        }
+
+        function showAuthModal() {
+            document.getElementById('auth-overlay').classList.remove('hidden');
+            document.getElementById('auth-email').focus();
+        }
+        function hideAuthModal() {
+            document.getElementById('auth-overlay').classList.add('hidden');
+            document.getElementById('auth-error').textContent = '';
+        }
+
+        function switchAuthMode() {
+            authMode = authMode === 'login' ? 'register' : 'login';
+            document.getElementById('auth-title').textContent = authMode === 'login' ? 'Connexion' : 'Créer un compte';
+            document.getElementById('auth-submit').textContent = authMode === 'login' ? 'Se connecter' : 'Créer un compte';
+            document.getElementById('auth-toggle').innerHTML = authMode === 'login'
+                ? 'Pas encore de compte ? <a onclick="switchAuthMode()">Créer un compte</a>'
+                : 'Déjà un compte ? <a onclick="switchAuthMode()">Se connecter</a>';
+            document.getElementById('auth-error').textContent = '';
+        }
+
+        async function submitAuth() {
+            const email = document.getElementById('auth-email').value.trim();
+            const password = document.getElementById('auth-password').value;
+            const errorEl = document.getElementById('auth-error');
+            const btn = document.getElementById('auth-submit');
+
+            if (!email || !password) { errorEl.textContent = 'Remplissez tous les champs'; return; }
+            if (password.length < 6) { errorEl.textContent = 'Mot de passe : 6 caractères minimum'; return; }
+
+            btn.disabled = true;
+            btn.textContent = 'Chargement...';
+            errorEl.textContent = '';
+
+            try {
+                let result;
+                if (authMode === 'login') {
+                    result = await sb.auth.signInWithPassword({ email, password });
+                } else {
+                    result = await sb.auth.signUp({ email, password });
+                }
+
+                if (result.error) throw result.error;
+
+                if (authMode === 'register' && result.data.user && !result.data.session) {
+                    errorEl.textContent = '';
+                    errorEl.style.color = '#10b981';
+                    errorEl.textContent = '✓ Vérifiez votre email pour confirmer votre compte';
+                    btn.disabled = false;
+                    btn.textContent = 'Se connecter';
+                    authMode = 'login';
+                    return;
+                }
+
+                currentUser = result.data.user;
+                onAuthSuccess();
+            } catch (err) {
+                const msg = err.message || 'Erreur inconnue';
+                errorEl.style.color = '#ef4444';
+                errorEl.textContent = msg.includes('Invalid login') ? 'Email ou mot de passe incorrect'
+                    : msg.includes('already registered') ? 'Cet email est déjà utilisé'
+                    : msg;
+            }
+            btn.disabled = false;
+            btn.textContent = authMode === 'login' ? 'Se connecter' : 'Créer un compte';
+        }
+
+        async function onAuthSuccess() {
+            hideAuthModal();
+            updateAuthUI();
+            await loadOrCreateExploitation();
+            await loadExploitationParcelles();
+            renderExploitationOnMap();
+            updateDashboard();
+        }
+
+        async function logout() {
+            await sb.auth.signOut();
+            currentUser = null;
+            currentExploitation = null;
+            exploitationParcelles = [];
+            updateAuthUI();
+            clearExploitationFromMap();
+            if (document.getElementById('dashboard-panel').classList.contains('open')) {
+                toggleDashboard();
+            }
+        }
+
+        function updateAuthUI() {
+            const authBtn = document.getElementById('btn-auth');
+            const dashBtn = document.getElementById('btn-dashboard');
+            const selectBtn = document.getElementById('btn-select-mode');
+            if (currentUser) {
+                authBtn.textContent = '👤 ' + (currentUser.email || '').split('@')[0];
+                authBtn.onclick = logout;
+                authBtn.title = 'Cliquez pour vous déconnecter';
+                dashBtn.style.display = '';
+                selectBtn.style.display = '';
+            } else {
+                authBtn.textContent = '👤 Connexion';
+                authBtn.onclick = showAuthModal;
+                authBtn.title = '';
+                dashBtn.style.display = 'none';
+                selectBtn.style.display = 'none';
+            }
+        }
+
+        // ── Exploitation CRUD ──
+        async function loadOrCreateExploitation() {
+            if (!currentUser) return;
+            let { data, error } = await supabase
+                .from('exploitations')
+                .select('*')
+                .eq('user_id', currentUser.id)
+                .maybeSingle();
+
+            if (!data) {
+                const res = await sb.from('exploitations').insert({
+                    user_id: currentUser.id,
+                    name: 'Mon exploitation'
+                }).select().single();
+                data = res.data;
+            }
+            currentExploitation = data;
+        }
+
+        async function renameExploitation(name) {
+            if (!currentExploitation) return;
+            await sb.from('exploitations')
+                .update({ name })
+                .eq('id', currentExploitation.id);
+            currentExploitation.name = name;
+        }
+
+        async function loadExploitationParcelles() {
+            if (!currentExploitation) return;
+            const { data } = await supabase
+                .from('exploitation_parcelles')
+                .select('*')
+                .eq('exploitation_id', currentExploitation.id)
+                .order('added_at', { ascending: false });
+            exploitationParcelles = data || [];
+        }
+
+        async function addParcelToExploitation(parcelId, props, lngLat) {
+            if (!currentExploitation) return false;
+            if (exploitationParcelles.length >= 200) {
+                showToast('Limite de 200 parcelles atteinte', '⚠️');
+                return false;
+            }
+            if (exploitationParcelles.some(p => p.parcel_id === parcelId)) {
+                showToast('Parcelle déjà dans l\'exploitation', '⚠️');
+                return false;
+            }
+
+            const { data, error } = await sb.from('exploitation_parcelles').insert({
+                exploitation_id: currentExploitation.id,
+                parcel_id: parcelId,
+                code_cultu: props.CODE_CULTU || null,
+                code_group: props.CODE_GROUP || null,
+                surf_parc: props.SURF_PARC ? parseFloat(props.SURF_PARC) : null,
+                centroid_lon: lngLat?.lng || null,
+                centroid_lat: lngLat?.lat || null,
+            }).select().single();
+
+            if (error) {
+                console.error('[Exploitation]', error);
+                showToast('Erreur lors de l\'ajout', '❌');
+                return false;
+            }
+            exploitationParcelles.push(data);
+            renderExploitationOnMap();
+            updateDashboard();
+            updateSelectCount();
+            showToast('Parcelle ajoutée', '✅');
+            return true;
+        }
+
+        async function removeParcelFromExploitation(parcelId) {
+            if (!currentExploitation) return;
+            await sb.from('exploitation_parcelles')
+                .delete()
+                .eq('exploitation_id', currentExploitation.id)
+                .eq('parcel_id', parcelId);
+            exploitationParcelles = exploitationParcelles.filter(p => p.parcel_id !== parcelId);
+            renderExploitationOnMap();
+            updateDashboard();
+            updateSelectCount();
+        }
+
+        // ── Select Mode ──
+        function toggleSelectMode() {
+            if (!currentUser) { showAuthModal(); return; }
+            selectMode = !selectMode;
+            document.getElementById('select-banner').classList.toggle('hidden', !selectMode);
+            document.getElementById('btn-select-mode').classList.toggle('active', selectMode);
+            map.getCanvas().style.cursor = selectMode ? 'crosshair' : '';
+            updateSelectCount();
+        }
+
+        function finishSelectMode() {
+            selectMode = false;
+            document.getElementById('select-banner').classList.add('hidden');
+            document.getElementById('btn-select-mode').classList.remove('active');
+            map.getCanvas().style.cursor = '';
+            toggleDashboard();
+        }
+
+        function updateSelectCount() {
+            document.getElementById('select-count').textContent = `${exploitationParcelles.length} / 200`;
+        }
+
+        // ── Map Rendering ──
+        function renderExploitationOnMap() {
+            if (!mapReady) return;
+            const srcId = 'exploitation-parcelles-src';
+            const lyrFill = 'exploitation-parcelles-fill';
+            const lyrLine = 'exploitation-parcelles-line';
+
+            // Remove old layers
+            if (map.getLayer(lyrFill)) map.removeLayer(lyrFill);
+            if (map.getLayer(lyrLine)) map.removeLayer(lyrLine);
+            if (map.getSource(srcId)) map.removeSource(srcId);
+
+            if (exploitationParcelles.length === 0) return;
+
+            // Build GeoJSON from centroids (points for now)
+            const features = exploitationParcelles
+                .filter(p => p.centroid_lon && p.centroid_lat)
+                .map(p => ({
+                    type: 'Feature',
+                    geometry: { type: 'Point', coordinates: [p.centroid_lon, p.centroid_lat] },
+                    properties: { parcel_id: p.parcel_id, code_cultu: p.code_cultu }
+                }));
+
+            map.addSource(srcId, {
+                type: 'geojson',
+                data: { type: 'FeatureCollection', features }
+            });
+
+            map.addLayer({
+                id: lyrFill, type: 'circle', source: srcId,
+                paint: {
+                    'circle-radius': 8,
+                    'circle-color': '#1e40af',
+                    'circle-opacity': 0.7,
+                    'circle-stroke-color': '#ffffff',
+                    'circle-stroke-width': 2,
+                }
+            });
+        }
+
+        function clearExploitationFromMap() {
+            if (!mapReady) return;
+            if (map.getLayer('exploitation-parcelles-fill')) map.removeLayer('exploitation-parcelles-fill');
+            if (map.getLayer('exploitation-parcelles-line')) map.removeLayer('exploitation-parcelles-line');
+            if (map.getSource('exploitation-parcelles-src')) map.removeSource('exploitation-parcelles-src');
+        }
+
+        // ── Dashboard ──
+        function toggleDashboard() {
+            if (!currentUser) { showAuthModal(); return; }
+            const panel = document.getElementById('dashboard-panel');
+            panel.classList.toggle('open');
+            if (panel.classList.contains('open')) updateDashboard();
+        }
+
+        function updateDashboard() {
+            if (!currentExploitation) return;
+
+            // User bar
+            document.getElementById('dash-user-bar').innerHTML = currentUser ? `
+                <div class="user-bar">
+                    <span>👤</span>
+                    <span class="user-email">${currentUser.email}</span>
+                    <button class="top-btn" onclick="logout()" style="font-size:0.68rem;">Déconnexion</button>
+                </div>` : '';
+
+            // Exploitation name
+            document.getElementById('exploitation-name').value = currentExploitation.name || '';
+
+            // Stats
+            const parcelles = exploitationParcelles;
+            const totalSurface = parcelles.reduce((s, p) => s + (p.surf_parc || 0), 0);
+            const cultures = [...new Set(parcelles.map(p => p.code_cultu).filter(Boolean))];
+            const groups = [...new Set(parcelles.map(p => p.code_group).filter(Boolean))];
+
+            document.getElementById('dash-stats').innerHTML = `
+                <div class="dash-stat"><div class="ds-value">${parcelles.length}</div><div class="ds-label">Parcelles</div></div>
+                <div class="dash-stat"><div class="ds-value">${totalSurface.toFixed(1)} ha</div><div class="ds-label">Surface totale</div></div>
+                <div class="dash-stat"><div class="ds-value">${cultures.length}</div><div class="ds-label">Cultures</div></div>
+                <div class="dash-stat"><div class="ds-value">${groups.length}</div><div class="ds-label">Groupes</div></div>`;
+
+            // Culture distribution chart
+            const cultureCount = {};
+            parcelles.forEach(p => {
+                const c = p.code_cultu || 'Inconnu';
+                cultureCount[c] = (cultureCount[c] || 0) + (p.surf_parc || 0);
+            });
+            const sorted = Object.entries(cultureCount).sort((a, b) => b[1] - a[1]).slice(0, 8);
+
+            const ctx = document.getElementById('dash-culture-chart');
+            if (ctx) {
+                if (dashCultureChart) dashCultureChart.destroy();
+                if (sorted.length > 0) {
+                    dashCultureChart = new Chart(ctx.getContext('2d'), {
+                        type: 'doughnut',
+                        data: {
+                            labels: sorted.map(([k]) => cropLabels[k] || k),
+                            datasets: [{
+                                data: sorted.map(([, v]) => parseFloat(v.toFixed(2))),
+                                backgroundColor: sorted.map(([k]) => {
+                                    const p = parcelles.find(p => p.code_cultu === k);
+                                    return p ? (cultureColors[p.code_group] || cultureColors.default) : cultureColors.default;
+                                }),
+                                borderWidth: 2, borderColor: '#fff'
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            plugins: {
+                                legend: { position: 'bottom', labels: { font: { size: 10 }, usePointStyle: true, padding: 8 } },
+                                tooltip: { callbacks: { label: (c) => ` ${c.label}: ${c.parsed.toFixed(1)} ha` } }
+                            }
+                        }
+                    });
+                }
+            }
+
+            // Alerts
+            const monocultures = [];
+            // Check for monoculture using lineageData
+            parcelles.forEach(p => {
+                const rec = lineageData && lineageData[p.parcel_id];
+                if (rec) {
+                    const lin = rec.lineage || rec.l || {};
+                    const allCodes = [rec.c || rec.c23, ...Object.values(lin).map(e => e.c)].filter(Boolean);
+                    const unique = new Set(allCodes);
+                    if (unique.size === 1 && allCodes.length >= 3) {
+                        monocultures.push({ id: p.parcel_id, culture: allCodes[0], years: allCodes.length });
+                    }
+                }
+            });
+
+            let alertsHtml = '';
+            if (monocultures.length > 0) {
+                alertsHtml += `<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px;margin-bottom:8px;">
+                    <div style="font-weight:700;color:#991b1b;font-size:0.8rem;">⚠️ ${monocultures.length} parcelle${monocultures.length > 1 ? 's' : ''} en monoculture</div>
+                    <div style="font-size:0.72rem;color:#b91c1c;margin-top:4px;">
+                        ${monocultures.slice(0, 3).map(m => `${m.id}: ${cropLabels[m.culture] || m.culture} (${m.years} ans)`).join('<br>')}
+                        ${monocultures.length > 3 ? `<br>+ ${monocultures.length - 3} autres` : ''}
+                    </div>
+                </div>`;
+            }
+            if (parcelles.length === 0) {
+                alertsHtml += `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px;">
+                    <div style="font-size:0.82rem;color:#166534;">Cliquez sur <strong>🏠 Exploitation</strong> puis sélectionnez vos parcelles sur la carte.</div>
+                </div>`;
+            }
+            document.getElementById('dash-alerts').innerHTML = alertsHtml;
+
+            // Parcel list
+            const listEl = document.getElementById('dash-parcel-list');
+            if (parcelles.length === 0) {
+                listEl.innerHTML = '<p style="text-align:center;color:var(--text-muted);font-size:0.8rem;padding:20px;">Aucune parcelle ajoutée</p>';
+            } else {
+                listEl.innerHTML = parcelles.map(p => {
+                    const color = cultureColors[p.code_group] || cultureColors.default;
+                    const name = cropLabels[p.code_cultu] || p.code_cultu || '?';
+                    return `<div class="parcel-list-item">
+                        <div class="pli-color" style="background:${color}"></div>
+                        <div class="pli-info">
+                            <div class="pli-name">${name}</div>
+                            <div class="pli-meta">${p.parcel_id} · ${p.surf_parc ? p.surf_parc.toFixed(2) + ' ha' : '—'}</div>
+                        </div>
+                        <button class="pli-remove" onclick="removeParcelFromExploitation('${p.parcel_id}')" title="Retirer">✕</button>
+                    </div>`;
+                }).join('');
+            }
+        }
+
+        // Init auth on page load
+        initAuth();
+        updateAuthUI();
 
     </script>
 </body>
