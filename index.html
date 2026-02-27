@@ -2952,175 +2952,105 @@
             container.innerHTML = `<div class="timeline-strip">${cells}</div>`;
         }
 
-        function renderHistory(parcelId, props) {
+        function renderHistoryWithRecord(parcelId, props, record) {
             const list = document.getElementById('history-list');
             const currentYear = document.getElementById('year-select').value;
-            const record = lineageData && lineageData[parcelId];
 
-            const currentCultureCode = props.CODE_CULTU || '—';
-            const currentCropName = cropLabels[currentCultureCode] || currentCultureCode;
-            const currentGroup = props.CODE_GROUP || '';
-
+            // 1. Reset des indicateurs visuels (Rotation et Strips)
             if (!record) {
                 renderRotationScore(null);
                 renderTimelineStrip(null);
-                renderSiblings(null);
-                list.innerHTML = `
-            <div class="history-item">
-                <div class="timeline-dot"></div>
-                <div class="year-badge current">${currentYear}</div>
-                <div class="parent-card">
-                    <div class="parent-card-header">
-                        <div class="culture-dot" style="background:${getCultureColor(currentGroup)}"></div>
-                        <div style="font-weight:600;color:var(--text-main);">${currentCropName}</div>
-                    </div>
-                    <div style="font-size:0.75rem;color:var(--text-muted);margin-top:4px;">
-                        ${props.SURF_PARC ? parseFloat(props.SURF_PARC).toFixed(2) + ' ha' : '—'}
-                    </div>
-                </div>
-            </div>`;
+                list.innerHTML = `<div class="history-item"><div class="year-badge current">${currentYear}</div><p>Aucun historique trouvé pour cette parcelle.</p></div>`;
                 return;
             }
 
-            // Parse lineage
-            const recordCulture = record["culture_2023"] || record["c23"] || currentCultureCode;
-            const lineage = record["lineage"] || record["l"] || {};
+            const lineage = record.lineage || {};
             const sortedYears = Object.keys(lineage).sort((a, b) => b - a);
 
-            // Build full timeline
+            // 2. Préparation des données pour la Timeline et le Score de rotation
             const allEntries = [{
                 year: parseInt(currentYear),
-                cultureCode: recordCulture,
-                cultureGroup: currentGroup,
-                isCurrent: true,
-                confidence: null
+                cultureCode: record.c || props.CODE_CULTU,
+                cultureGroup: record.g || props.CODE_GROUP,
+                isCurrent: true
             }];
-            const allCultures = [recordCulture];
 
-            // Track parent changes for mutation badges
-            const parentIds = [];
+            const allCultures = [record.c || props.CODE_CULTU];
+
             sortedYears.forEach(y => {
                 const entry = lineage[y];
-                const code = entry.culture || entry.c || '—';
-                const cf = entry.confidence ?? entry.cf;
-                const parentId = entry.parent_id || entry.p;
-                allCultures.push(code);
-                parentIds.push(parentId);
                 allEntries.push({
                     year: parseInt(y),
-                    cultureCode: code,
-                    cultureGroup: '',
-                    isCurrent: false,
-                    confidence: cf
+                    cultureCode: entry.c || '—',
+                    confidence: entry.cf
                 });
+                allCultures.push(entry.c);
             });
 
-            allEntries.sort((a, b) => a.year - b.year);
+            // 3. Mise à jour des composants visuels
+            renderRotationScore(computeRotationScore(allCultures));
+            renderTimelineStrip(allEntries.sort((a, b) => a.year - b.year));
 
-            // Rotation score
-            const rotScore = computeRotationScore(allCultures);
-            renderRotationScore(rotScore);
+            // 4. Génération du HTML de la timeline détaillée
+            const currentCropName = cropLabels[record.c || props.CODE_CULTU] || record.c || props.CODE_CULTU;
 
-            // Timeline strip
-            renderTimelineStrip(allEntries);
-
-            // Siblings
-            const siblings = findSiblings(parcelId, record);
-            renderSiblings(siblings);
-
-            // Detect parent changes for header badge
-            const uniqueParents = [...new Set(parentIds.filter(Boolean))];
-            const parentChangeBadge = uniqueParents.length > 1
-                ? `<span class="event-tag split" style="margin-left:6px;">🔀 ${uniqueParents.length} parents différents</span>`
-                : '';
-
-            // Render detailed timeline
-            const currentCropNameResolved = cropLabels[recordCulture] || recordCulture;
-            const currentEntry = `
+            let html = `
         <div class="history-item">
             <div class="timeline-dot"></div>
-            <div class="year-badge current">${currentYear} ${parentChangeBadge}</div>
+            <div class="year-badge current">${currentYear}</div>
             <div class="parent-card">
                 <div class="parent-card-header">
-                    <div class="culture-dot" style="background:${getCultureColor(currentGroup)}"></div>
-                    <div style="font-weight:600;color:var(--text-main);">${currentCropNameResolved}</div>
+                    <div class="culture-dot" style="background:${getCultureColor(record.g || props.CODE_GROUP)}"></div>
+                    <div style="font-weight:600;color:var(--text-main);">${currentCropName}</div>
                 </div>
-                <div style="font-size:0.75rem;color:var(--text-muted);margin-top:4px;">
-                    ${props.SURF_PARC ? parseFloat(props.SURF_PARC).toFixed(2) + ' ha' : '—'}
-                </div>
+                <div style="font-size:0.75rem;color:var(--text-muted);margin-top:4px;">${props.SURF_PARC ? parseFloat(props.SURF_PARC).toFixed(2) + ' ha' : '—'}</div>
             </div>
         </div>`;
 
-            let prevCulture = recordCulture;
-            let prevParent = null;
+            let prevCulture = record.c || props.CODE_CULTU;
 
-            const historyEntries = sortedYears.map(y => {
+            html += sortedYears.map(y => {
                 const entry = lineage[y];
-                const code = entry.culture || entry.c || '—';
+                const code = entry.c || '—';
                 const cropName = cropLabels[code] || code;
-                const confidence = (entry.confidence ?? entry.cf) != null ? Math.round((entry.confidence ?? entry.cf) * 100) : null;
-                const parentId = entry.parent_id || entry.p || null;
-
-                // Detect events
-                let eventHtml = '';
-                let dotClass = 'past';
-                const cultureChanged = code !== prevCulture && prevCulture !== '—' && code !== '—';
-                const parentChanged = prevParent && parentId && parentId !== prevParent;
-
-                if (confidence !== null && confidence < 50) {
-                    eventHtml += `<span class="event-tag split">✂️ Prob. découpe (${confidence}%)</span>`;
-                    dotClass = 'past event-split';
-                }
-                if (parentChanged) {
-                    eventHtml += `<span class="event-tag merge">🔀 Nouveau parent</span>`;
-                    if (dotClass === 'past') dotClass = 'past event-merge';
-                }
-
+                const confidence = entry.cf != null ? Math.round(entry.cf * 100) : null;
+                const cultureChanged = code !== prevCulture && code !== '—';
                 prevCulture = code;
-                prevParent = parentId;
 
-                const confBar = confidence !== null ? `
-            <div class="confidence-bar"><div class="confidence-fill" style="width:${confidence}%"></div></div>
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:3px;">
-                <span style="font-size:0.7rem;color:var(--text-muted);">Fiabilité: ${confidence}%</span>
-                ${parentId ? `<span class="siblings-link" title="Identifiant de la parcelle parente">🔗 Parent: ${parentId}</span>` : ''}
-            </div>` : (parentId ? `
-            <div style="margin-top:4px;">
-                <span class="siblings-link" title="Identifiant de la parcelle parente">🔗 Parent: ${parentId}</span>
-            </div>` : '');
-
-                // Count siblings for this year+parent
-                let sibInfo = '';
-                if (parentId && parentIndex) {
-                    const key = `${parentId}_${y}`;
-                    const sibCount = (parentIndex[key] || []).filter(id => id !== parcelId).length;
-                    if (sibCount > 0) {
-                        sibInfo = `<div style="font-size:0.68rem;color:#d97706;margin-top:4px;">✂️ ${sibCount} parcelle${sibCount > 1 ? 's' : ''} sœur${sibCount > 1 ? 's' : ''} cette année</div>`;
-                    }
-                }
-
-                const cultureColor = getCultureColor('');
                 return `
             <div class="history-item">
-                <div class="timeline-dot ${dotClass}"></div>
+                <div class="timeline-dot past ${confidence < 50 ? 'event-split' : ''}"></div>
                 <div class="year-badge">
-                    ${y}
-                    ${eventHtml}
+                    ${y} 
+                    ${confidence < 50 ? `<span class="event-tag split">✂️ Découpe probable</span>` : ''}
                     ${cultureChanged ? '<span class="event-tag new">🔄 Changement</span>' : ''}
                 </div>
                 <div class="parent-card">
                     <div class="parent-card-header">
-                        <div class="culture-dot" style="background:${cultureColor}"></div>
+                        <div class="culture-dot" style="background:${getCultureColor('')}"></div>
                         <div style="font-weight:600;color:var(--text-main);">${cropName}</div>
                     </div>
-                    ${confBar}
-                    ${sibInfo}
+                    ${confidence !== null ? `
+                        <div class="confidence-bar"><div class="confidence-fill" style="width:${confidence}%"></div></div>
+                        <span style="font-size:0.7rem;color:var(--text-muted);">Fiabilité: ${confidence}%</span>
+                        <br><span style="font-size:0.65rem;color:var(--text-muted);cursor:pointer;" onclick="loadParent('${entry.p}')">🔗 Parent: ${entry.p}</span>
+                    ` : ''}
                 </div>
             </div>`;
             }).join('');
 
-            list.innerHTML = currentEntry + historyEntries;
+            list.innerHTML = html;
         }
+
+        // Petite fonction bonus pour naviguer vers le parent au clic
+        window.loadParent = function (parentId) {
+            if (!parentId || parentId === 'undefined') return;
+            const year = parentId.split('_')[0];
+            document.getElementById('year-select').value = year;
+            document.getElementById('year-select').dispatchEvent(new Event('change'));
+            // Ici on pourrait ajouter un flyTo vers le parent si on avait ses coordonnées
+            showToast(`Passage à la campagne ${year}`, "📅");
+        };
 
         // ═══════════════════════════════════════════════════════════
         // ── PARCEL VISUALIZATION — MINI-MAP ENGINE ──
