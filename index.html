@@ -1449,6 +1449,57 @@
                 opacity: 1;
             }
         }
+
+        /* ── Heatmap Styles ── */
+        .heatmap-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-top: 15px;
+        }
+
+        .heatmap-branch {
+            background: var(--border-light);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 12px;
+        }
+
+        .branch-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 0.75rem;
+        }
+
+        .health-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
+        }
+
+        .heatmap-row {
+            display: flex;
+            gap: 4px;
+            height: 32px;
+        }
+
+        .heatmap-cell {
+            flex: 1;
+            border-radius: 4px;
+            position: relative;
+            cursor: help;
+            transition: transform 0.2s, box-shadow 0.2s;
+            border: 1px solid rgba(0, 0, 0, 0.05);
+        }
+
+        .heatmap-cell:hover {
+            transform: scale(1.15);
+            z-index: 5;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
     </style>
 </head>
 
@@ -1723,6 +1774,7 @@
                 <button class="side-tab" onclick="switchSideTab(this, 'stab-history')">📜 Historique</button>
                 <button class="side-tab" onclick="switchSideTab(this, 'stab-parcelle')">🗺️ Parcelle</button>
                 <button class="side-tab" onclick="switchSideTab(this, 'stab-notes')">📝 Notes</button>
+                <button class="side-tab" onclick="switchSideTab(this, 'stab-heatmap')">📊 Heatmap</button>
             </div>
 
             <div class="side-tab-content active" id="stab-info">
@@ -1730,6 +1782,24 @@
                 <label>🌡️ Conditions météo (saison)</label>
                 <div class="chart-container">
                     <canvas id="weather-chart" height="180"></canvas>
+                </div>
+            </div>
+            <div class="side-tab-content" id="stab-heatmap">
+                <label>🗺️ Carte de vigueur de rotation</label>
+                <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 12px;">
+                    Cette carte divise votre parcelle en zones selon la qualité de l'historique cultural de chaque
+                    fragment.
+                </div>
+
+                <div id="spatial-heatmap-container"
+                    style="height: 300px; border-radius: var(--radius-sm); border: 1px solid var(--border); overflow: hidden; position: relative; background: #f8fafc;">
+                </div>
+
+                <div class="info-grid" style="margin-top: 15px; grid-template-columns: 1fr;">
+                    <div class="info-card" id="heatmap-status-card" style="border-left: 4px solid var(--accent);">
+                        <div class="ic-label" id="heatmap-score-label">Analyse en cours...</div>
+                        <div class="ic-value" id="heatmap-score-value">—</div>
+                    </div>
                 </div>
             </div>
 
@@ -2603,92 +2673,149 @@
                 bucketCache[bucketId] = data;
                 return data;
             } catch (e) {
-                console.warn(`[iParcel] Bucket lineage/${bucketId} introuvable`);
+                console.warn(`[iParcel] Bucket ${bucketId} introuvable`);
                 return null;
             }
         }
 
-        // ── Parcel Details — single fetch, pre-calculated lineage ──
+        // ── Build full lineage by walking parent chain recursively ──
+        async function buildFullLineage(compositeId, maxDepth = 12) {
+            const lineage = {};
+            let currentUid = compositeId;
+            const visited = new Set([currentUid]);
+
+            for (let depth = 0; depth < maxDepth; depth++) {
+                const bucket = currentUid.slice(-2);
+                const data = await loadBucket(bucket);
+                if (!data) break;
+
+                const filiation = data.filiations && data.filiations[currentUid];
+                if (!filiation || !filiation.parents || filiation.parents.length === 0) break;
+
+                // Take best parent (highest overlap)
+                const bestParent = filiation.parents.reduce((a, b) => (b.pct > a.pct) ? b : a);
+                const parentUid = bestParent.uid;
+                if (visited.has(parentUid)) break;
+                visited.add(parentUid);
+
+                const parentYear = parentUid.split('_')[0];
+                const parentIdParcel = parentUid.split('_').slice(1).join('_');
+
+                // Load parent's bucket to get its culture info
+                const parentBucket = parentUid.slice(-2);
+                const parentData = await loadBucket(parentBucket);
+                const parentInfo = parentData && parentData.parcelles && parentData.parcelles[parentUid];
+
+                lineage[parentYear] = {
+                    c: parentInfo ? parentInfo.c : '?',
+                    g: parentInfo ? parentInfo.g : '',
+                    s: parentInfo ? parentInfo.s : null,
+                    cf: bestParent.pct,
+                    p: parentIdParcel,
+                    uid: parentUid,
+                };
+
+                currentUid = parentUid;
+            }
+
+            return lineage;
+        }
+
+        // ── Parcel Details ──
         async function showDetails(e, parcelId, props) {
             const year = document.getElementById('year-select').value;
-            currentParcelId = parcelId;
+            const compositeId = `${year}_${parcelId}`;
+            currentParcelId = compositeId;
 
-            console.log(`[iParcel] Recherche lineage : ${parcelId}`);
+            console.log(`[iParcel] Recherche : ${compositeId}`);
 
             document.getElementById('parcel-name').innerHTML = "Chargement...";
             toggleSidebar(true);
 
             try {
-                // Single fetch: bucket = 2 derniers chiffres de l'id_parcel
-                const bucket = parcelId.slice(-2).padStart(2, '0');
+                // Load initial bucket
+                const bucket = compositeId.slice(-2);
                 const data = await loadBucket(bucket);
+                if (!data) throw new Error("Fichier partition introuvable");
 
-                // Record is pre-calculated with full lineage
-                let record = data ? data[parcelId] : null;
+                const parcelInfo = data.parcelles && data.parcelles[compositeId];
 
-                if (record) {
-                    if (!record.lineage && record.l) record.lineage = record.l;
-                    if (!record.l && record.lineage) record.l = record.lineage;
-                    if (!record.c) record.c = record.c23 || props.CODE_CULTU;
-                    if (!record.g) record.g = record.g23 || props.CODE_GROUP;
+                // Build full lineage by walking parent chain
+                const lineage = await buildFullLineage(compositeId);
+
+                // Build record compatible with original format
+                let record = null;
+                if (parcelInfo) {
+                    record = {
+                        ...parcelInfo,
+                        c23: parcelInfo.c || props.CODE_CULTU,
+                        l: lineage,
+                        lineage: lineage,
+                    };
+                } else {
+                    // Parcel not in index — use props only
+                    record = {
+                        c: props.CODE_CULTU,
+                        g: props.CODE_GROUP,
+                        s: props.SURF_PARC,
+                        c23: props.CODE_CULTU,
+                        l: lineage,
+                        lineage: lineage,
+                    };
                 }
 
-                // Store in lineageData for other functions
+                // Store in lineageData for compatibility with other functions
                 if (!lineageData) lineageData = {};
-                if (record) lineageData[parcelId] = record;
+                lineageData[parcelId] = record;
+                lineageData[compositeId] = record;
 
-                // Build parentIndex from lineage + siblings
+                // Build parentIndex entries for siblings
                 if (!parentIndex) parentIndex = {};
-                if (record) {
-                    const lineage = record.l || record.lineage || {};
-                    for (const [yr, entry] of Object.entries(lineage)) {
-                        if (entry.p) {
-                            const key = `${entry.p}_${yr}`;
-                            if (!parentIndex[key]) parentIndex[key] = [];
-                            if (!parentIndex[key].includes(parcelId)) parentIndex[key].push(parcelId);
-                        }
+                for (const [yr, entry] of Object.entries(lineage)) {
+                    if (entry.p) {
+                        const key = `${entry.p}_${yr}`;
+                        if (!parentIndex[key]) parentIndex[key] = [];
+                        if (!parentIndex[key].includes(parcelId)) parentIndex[key].push(parcelId);
                     }
-                    const siblings = record.sib || {};
-                    for (const [yr, sibs] of Object.entries(siblings)) {
-                        const parentId = lineage[yr]?.p;
-                        if (parentId) {
-                            const key = `${parentId}_${yr}`;
-                            if (!parentIndex[key]) parentIndex[key] = [];
-                            for (const sib of sibs) {
-                                if (!parentIndex[key].includes(sib.id)) parentIndex[key].push(sib.id);
-                                if (!lineageData[sib.id]) lineageData[sib.id] = { c23: sib.c, g23: sib.g };
-                            }
-                        }
+                }
+
+                // Also index siblings from the bucket filiations
+                for (const [uid, fil] of Object.entries(data.filiations || {})) {
+                    if (!fil.parents) continue;
+                    for (const p of fil.parents) {
+                        const pYear = p.uid.split('_')[0];
+                        const pId = p.uid.split('_').slice(1).join('_');
+                        const childId = uid.split('_').slice(1).join('_');
+                        const key = `${pId}_${pYear}`;
+                        if (!parentIndex[key]) parentIndex[key] = [];
+                        if (!parentIndex[key].includes(childId)) parentIndex[key].push(childId);
                     }
                 }
 
                 // --- Display ---
                 const cropName = cropLabels[props.CODE_CULTU] || props.CODE_CULTU || "Culture inconnue";
                 const groupName = groupLabels.get(props.CODE_GROUP) || props.CODE_GROUP || "";
-                const lineage = record ? (record.l || record.lineage || {}) : {};
                 const lineageYears = Object.keys(lineage);
                 const yearsTracked = lineageYears.length > 0 ? lineageYears.length + 1 : 1;
-                const children = record ? (record.ch || {}) : {};
-                const siblings = record ? (record.sib || {}) : {};
-                const hasChildren = Object.keys(children).length > 0;
-                const hasSiblings = Object.keys(siblings).length > 0;
 
                 document.getElementById('parcel-name').innerHTML = `${cropName} <span class="culture-badge">${groupName}</span>`;
 
                 document.getElementById('info-grid').innerHTML = `
             <div class="info-card"><div class="ic-icon">🆔</div><div class="ic-value" style="font-size:0.75rem;">${parcelId}</div><div class="ic-label">ID Parcelle</div></div>
-            <div class="info-card"><div class="ic-icon">📐</div><div class="ic-value">${props.SURF_PARC ? parseFloat(props.SURF_PARC).toFixed(2) : '\u2014'} ha</div><div class="ic-label">Surface</div></div>
+            <div class="info-card"><div class="ic-icon">📐</div><div class="ic-value">${props.SURF_PARC ? parseFloat(props.SURF_PARC).toFixed(2) : '—'} ha</div><div class="ic-label">Surface</div></div>
             <div class="info-card"><div class="ic-icon">📅</div><div class="ic-value">${yearsTracked} an${yearsTracked > 1 ? 's' : ''}</div><div class="ic-label">Historique</div></div>
-            <div class="info-card"><div class="ic-icon">🌾</div><div class="ic-value">${props.CODE_CULTU || '\u2014'}</div><div class="ic-label">Code culture</div></div>
-            ${hasSiblings ? `<div class="info-card"><div class="ic-icon">✂️</div><div class="ic-value">${Object.values(siblings).flat().length}</div><div class="ic-label">Parcelles sœurs</div></div>` : ''}
-            ${hasChildren ? `<div class="info-card"><div class="ic-icon">🌱</div><div class="ic-value">${Object.values(children).flat().length}</div><div class="ic-label">Descendantes</div></div>` : ''}
+            <div class="info-card"><div class="ic-icon">🌾</div><div class="ic-value">${props.CODE_CULTU || '—'}</div><div class="ic-label">Code culture</div></div>
         `;
 
+                // Météo
                 const w = await fetchWeather(e.lngLat.lat, e.lngLat.lng, year);
                 if (w) renderWeatherChart(w);
 
-                renderHistoryWithRecord(parcelId, props, record);
-
+                // Historique — pass the record with full lineage
+                renderHistoryWithRecord(compositeId, props, record);
+                // Dans showDetails, juste après renderHistoryWithRecord(compositeId, props, record);
+                renderRotationHeatmap(compositeId, record, data);
+                // Mini-map
                 if (highlightedFeature) initParcelViz(parcelId, highlightedFeature, props);
 
             } catch (err) {
@@ -2932,7 +3059,83 @@
             }
             return { score, label, level, unique: unique.size, total: valid.length };
         }
+        let spatialHeatmapMap = null;
 
+        async function renderSpatialHeatmap(parcelId, feature, record, bucketData) {
+            const container = document.getElementById('spatial-heatmap-container');
+
+            // Nettoyage de l'ancienne instance
+            if (spatialHeatmapMap) { spatialHeatmapMap.remove(); spatialHeatmapMap = null; }
+
+            // 1. Calcul des scores pour chaque branche (parent)
+            const filiation = bucketData.filiations && bucketData.filiations[parcelId];
+            const parents = filiation ? filiation.parents : [];
+            const scores = {};
+
+            // Calculer le score de chaque parent trouvé dans le bucket
+            for (const p of parents) {
+                const branchLineage = await buildFullLineage(p.uid);
+                const codes = Object.values(branchLineage).map(l => l.c).filter(c => c && c !== '?');
+                const uniqueRatio = new Set(codes).size / (codes.length || 1);
+
+                // Attribution d'une couleur : Rouge (Monoculture) -> Vert (Diversifié)
+                let color = "#ef4444"; // Rouge
+                if (uniqueRatio > 0.7) color = "#10b981"; // Vert
+                else if (uniqueRatio > 0.4) color = "#f59e0b"; // Orange
+
+                scores[p.uid] = color;
+            }
+
+            // 2. Initialisation de la mini-carte spatiale
+            const bbox = getFeatureBboxFromGeom(feature.geometry);
+            spatialHeatmapMap = new maplibregl.Map({
+                container: 'spatial-heatmap-container',
+                style: { version: 8, sources: {}, layers: [{ id: 'bg', type: 'background', paint: { 'background-color': '#f1f5f9' } }] },
+                bounds: [[bbox[0], bbox[1]], [bbox[2], bbox[3]]],
+                fitBoundsOptions: { padding: 20 },
+                interactive: false, attributionControl: false
+            });
+
+            spatialHeatmapMap.on('load', () => {
+                const year = document.getElementById('year-select').value;
+                const srcId = `heatmap-src`;
+
+                // Charger la couche de l'année précédente pour voir les divisions
+                spatialHeatmapMap.addSource(srcId, {
+                    type: 'vector',
+                    url: `pmtiles://https://huggingface.co/datasets/Juckles19/iparcel-public/resolve/main/${year}.pmtiles`
+                });
+
+                // Coloration spatiale : on matche l'UID du parent avec sa couleur de score
+                const colorExpression = ["match", ["get", "id_parcel"]]; // ou l'ID utilisé dans tes pmtiles
+                Object.entries(scores).forEach(([uid, color]) => {
+                    const idOnly = uid.split('_')[1];
+                    colorExpression.push(idOnly, color);
+                });
+                colorExpression.push("rgba(0,0,0,0.05)"); // Parcelles voisines transparentes
+
+                spatialHeatmapMap.addLayer({
+                    id: 'heatmap-layer-fill', type: 'fill', source: srcId, 'source-layer': 'parcelles',
+                    paint: { 'fill-color': colorExpression, 'fill-opacity': 0.8 }
+                });
+
+                // Contour de la parcelle actuelle 2023 pour référence
+                spatialHeatmapMap.addSource('outline-2023', {
+                    type: 'geojson',
+                    data: { type: 'Feature', geometry: feature.geometry }
+                });
+                spatialHeatmapMap.addLayer({
+                    id: 'outline-2023-line', type: 'line', source: 'outline-2023',
+                    paint: { 'line-color': '#000', 'line-width': 2 }
+                });
+
+                // Mise à jour de l'UI
+                const avgScore = Object.keys(scores).length > 0 ? "Analyse Multi-zones" : "Zone Unique";
+                document.getElementById('heatmap-score-label').textContent = avgScore;
+                document.getElementById('heatmap-score-value').textContent =
+                    Object.keys(scores).length > 1 ? "Fusion détectée" : "Historique stable";
+            });
+        }
         function renderRotationScore(scoreData) {
             const container = document.getElementById('rotation-score');
             if (!scoreData || scoreData.total < 2) {
@@ -3026,6 +3229,8 @@
 
             renderRotationScore(computeRotationScore(allCultures));
             renderTimelineStrip(allEntries.sort((a, b) => a.year - b.year));
+            // Remplace l'ancien appel par celui-ci
+            renderSpatialHeatmap(compositeId, highlightedFeature, record, data);
 
             // Detailed timeline
             const currentCropName = cropLabels[record.c || record.c23 || props.CODE_CULTU] || record.c || props.CODE_CULTU;
@@ -3080,6 +3285,59 @@
             }).join('');
 
             list.innerHTML = html;
+        }
+
+        async function renderRotationHeatmap(parcelId, record, bucketData) {
+            const root = document.getElementById('heatmap-grid-root');
+            root.innerHTML = '<div class="skeleton" style="height:100px;"></div>';
+
+            // 1. Identifier les branches historiques (Filiations depuis le bucket)
+            const filiation = bucketData.filiations && bucketData.filiations[parcelId];
+            const parents = filiation ? filiation.parents : [];
+
+            // Si pas de parents, on traite la parcelle comme une branche unique
+            const branches = parents.length > 0 ? parents : [{ uid: parcelId, pct: 1 }];
+            root.innerHTML = '';
+
+            for (const p of branches) {
+                const branchDiv = document.createElement('div');
+                branchDiv.className = 'heatmap-branch';
+
+                // Reconstruction de l'historique pour cette branche spécifique
+                // On utilise ta fonction buildFullLineage pour remonter le temps
+                const branchLineage = await buildFullLineage(p.uid);
+                const yearsList = ["2023", "2022", "2021", "2020", "2019", "2018", "2017", "2016"];
+
+                // Calcul du score de diversité
+                const codes = yearsList.map(y => (y === "2023" && p.uid === parcelId) ? (record.c || record.c23) : (branchLineage[y]?.c)).filter(c => c && c !== '?');
+                const uniqueCount = new Set(codes).size;
+                const ratio = uniqueCount / codes.length;
+
+                let healthColor = "#10b981"; // Vert (Bien)
+                if (ratio < 0.4) healthColor = "#ef4444"; // Rouge (Mauvais)
+                else if (ratio < 0.7) healthColor = "#f59e0b"; // Orange (Moyen)
+
+                branchDiv.innerHTML = `
+            <div class="branch-info">
+                <span style="font-weight:700;">Branche ID: ${p.uid.split('_').pop()}</span>
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <span style="font-size:0.65rem; color:var(--text-muted);">${uniqueCount} cultures / ${codes.length} ans</span>
+                    <div class="health-dot" style="background:${healthColor}"></div>
+                </div>
+            </div>
+            <div class="heatmap-row">
+                ${yearsList.map(y => {
+                    const isNow = (y === "2023" && p.uid === parcelId);
+                    const cultCode = isNow ? (record.c || record.c23) : (branchLineage[y]?.c || null);
+                    const group = isNow ? (record.g) : (branchLineage[y]?.g || '');
+                    const color = cultCode ? getCultureColor(group) : '#e2e8f0';
+                    const name = cropLabels[cultCode] || cultCode || 'Inconnu';
+                    return `<div class="heatmap-cell" style="background:${color}" title="${y} : ${name}"></div>`;
+                }).join('')}
+            </div>
+        `;
+                root.appendChild(branchDiv);
+            }
         }
 
         // Petite fonction bonus pour naviguer vers le parent au clic
