@@ -2603,148 +2603,92 @@
                 bucketCache[bucketId] = data;
                 return data;
             } catch (e) {
-                console.warn(`[iParcel] Bucket ${bucketId} introuvable`);
+                console.warn(`[iParcel] Bucket lineage/${bucketId} introuvable`);
                 return null;
             }
         }
 
-        // ── Build full lineage by walking parent chain recursively ──
-        async function buildFullLineage(compositeId, maxDepth = 12) {
-            const lineage = {};
-            let currentUid = compositeId;
-            const visited = new Set([currentUid]);
-
-            for (let depth = 0; depth < maxDepth; depth++) {
-                const bucket = currentUid.slice(-2);
-                const data = await loadBucket(bucket);
-                if (!data) break;
-
-                const filiation = data.filiations && data.filiations[currentUid];
-                if (!filiation || !filiation.parents || filiation.parents.length === 0) break;
-
-                // Take best parent (highest overlap)
-                const bestParent = filiation.parents.reduce((a, b) => (b.pct > a.pct) ? b : a);
-                const parentUid = bestParent.uid;
-                if (visited.has(parentUid)) break;
-                visited.add(parentUid);
-
-                const parentYear = parentUid.split('_')[0];
-                const parentIdParcel = parentUid.split('_').slice(1).join('_');
-
-                // Load parent's bucket to get its culture info
-                const parentBucket = parentUid.slice(-2);
-                const parentData = await loadBucket(parentBucket);
-                const parentInfo = parentData && parentData.parcelles && parentData.parcelles[parentUid];
-
-                lineage[parentYear] = {
-                    c: parentInfo ? parentInfo.c : '?',
-                    g: parentInfo ? parentInfo.g : '',
-                    s: parentInfo ? parentInfo.s : null,
-                    cf: bestParent.pct,
-                    p: parentIdParcel,
-                    uid: parentUid,
-                };
-
-                currentUid = parentUid;
-            }
-
-            return lineage;
-        }
-
-        // ── Parcel Details ──
+        // ── Parcel Details — single fetch, pre-calculated lineage ──
         async function showDetails(e, parcelId, props) {
             const year = document.getElementById('year-select').value;
-            const compositeId = `${year}_${parcelId}`;
-            currentParcelId = compositeId;
+            currentParcelId = parcelId;
 
-            console.log(`[iParcel] Recherche : ${compositeId}`);
+            console.log(`[iParcel] Recherche lineage : ${parcelId}`);
 
             document.getElementById('parcel-name').innerHTML = "Chargement...";
             toggleSidebar(true);
 
             try {
-                // Load initial bucket
-                const bucket = compositeId.slice(-2);
+                // Single fetch: bucket = 2 derniers chiffres de l'id_parcel
+                const bucket = parcelId.slice(-2).padStart(2, '0');
                 const data = await loadBucket(bucket);
-                if (!data) throw new Error("Fichier partition introuvable");
 
-                const parcelInfo = data.parcelles && data.parcelles[compositeId];
+                // Record is pre-calculated with full lineage
+                let record = data ? data[parcelId] : null;
 
-                // Build full lineage by walking parent chain
-                const lineage = await buildFullLineage(compositeId);
-
-                // Build record compatible with original format
-                let record = null;
-                if (parcelInfo) {
-                    record = {
-                        ...parcelInfo,
-                        c23: parcelInfo.c || props.CODE_CULTU,
-                        l: lineage,
-                        lineage: lineage,
-                    };
-                } else {
-                    // Parcel not in index — use props only
-                    record = {
-                        c: props.CODE_CULTU,
-                        g: props.CODE_GROUP,
-                        s: props.SURF_PARC,
-                        c23: props.CODE_CULTU,
-                        l: lineage,
-                        lineage: lineage,
-                    };
+                if (record) {
+                    if (!record.lineage && record.l) record.lineage = record.l;
+                    if (!record.l && record.lineage) record.l = record.lineage;
+                    if (!record.c) record.c = record.c23 || props.CODE_CULTU;
+                    if (!record.g) record.g = record.g23 || props.CODE_GROUP;
                 }
 
-                // Store in lineageData for compatibility with other functions
+                // Store in lineageData for other functions
                 if (!lineageData) lineageData = {};
-                lineageData[parcelId] = record;
-                lineageData[compositeId] = record;
+                if (record) lineageData[parcelId] = record;
 
-                // Build parentIndex entries for siblings
+                // Build parentIndex from lineage + siblings
                 if (!parentIndex) parentIndex = {};
-                for (const [yr, entry] of Object.entries(lineage)) {
-                    if (entry.p) {
-                        const key = `${entry.p}_${yr}`;
-                        if (!parentIndex[key]) parentIndex[key] = [];
-                        if (!parentIndex[key].includes(parcelId)) parentIndex[key].push(parcelId);
+                if (record) {
+                    const lineage = record.l || record.lineage || {};
+                    for (const [yr, entry] of Object.entries(lineage)) {
+                        if (entry.p) {
+                            const key = `${entry.p}_${yr}`;
+                            if (!parentIndex[key]) parentIndex[key] = [];
+                            if (!parentIndex[key].includes(parcelId)) parentIndex[key].push(parcelId);
+                        }
                     }
-                }
-
-                // Also index siblings from the bucket filiations
-                for (const [uid, fil] of Object.entries(data.filiations || {})) {
-                    if (!fil.parents) continue;
-                    for (const p of fil.parents) {
-                        const pYear = p.uid.split('_')[0];
-                        const pId = p.uid.split('_').slice(1).join('_');
-                        const childId = uid.split('_').slice(1).join('_');
-                        const key = `${pId}_${pYear}`;
-                        if (!parentIndex[key]) parentIndex[key] = [];
-                        if (!parentIndex[key].includes(childId)) parentIndex[key].push(childId);
+                    const siblings = record.sib || {};
+                    for (const [yr, sibs] of Object.entries(siblings)) {
+                        const parentId = lineage[yr]?.p;
+                        if (parentId) {
+                            const key = `${parentId}_${yr}`;
+                            if (!parentIndex[key]) parentIndex[key] = [];
+                            for (const sib of sibs) {
+                                if (!parentIndex[key].includes(sib.id)) parentIndex[key].push(sib.id);
+                                if (!lineageData[sib.id]) lineageData[sib.id] = { c23: sib.c, g23: sib.g };
+                            }
+                        }
                     }
                 }
 
                 // --- Display ---
                 const cropName = cropLabels[props.CODE_CULTU] || props.CODE_CULTU || "Culture inconnue";
                 const groupName = groupLabels.get(props.CODE_GROUP) || props.CODE_GROUP || "";
+                const lineage = record ? (record.l || record.lineage || {}) : {};
                 const lineageYears = Object.keys(lineage);
                 const yearsTracked = lineageYears.length > 0 ? lineageYears.length + 1 : 1;
+                const children = record ? (record.ch || {}) : {};
+                const siblings = record ? (record.sib || {}) : {};
+                const hasChildren = Object.keys(children).length > 0;
+                const hasSiblings = Object.keys(siblings).length > 0;
 
                 document.getElementById('parcel-name').innerHTML = `${cropName} <span class="culture-badge">${groupName}</span>`;
 
                 document.getElementById('info-grid').innerHTML = `
             <div class="info-card"><div class="ic-icon">🆔</div><div class="ic-value" style="font-size:0.75rem;">${parcelId}</div><div class="ic-label">ID Parcelle</div></div>
-            <div class="info-card"><div class="ic-icon">📐</div><div class="ic-value">${props.SURF_PARC ? parseFloat(props.SURF_PARC).toFixed(2) : '—'} ha</div><div class="ic-label">Surface</div></div>
+            <div class="info-card"><div class="ic-icon">📐</div><div class="ic-value">${props.SURF_PARC ? parseFloat(props.SURF_PARC).toFixed(2) : '\u2014'} ha</div><div class="ic-label">Surface</div></div>
             <div class="info-card"><div class="ic-icon">📅</div><div class="ic-value">${yearsTracked} an${yearsTracked > 1 ? 's' : ''}</div><div class="ic-label">Historique</div></div>
-            <div class="info-card"><div class="ic-icon">🌾</div><div class="ic-value">${props.CODE_CULTU || '—'}</div><div class="ic-label">Code culture</div></div>
+            <div class="info-card"><div class="ic-icon">🌾</div><div class="ic-value">${props.CODE_CULTU || '\u2014'}</div><div class="ic-label">Code culture</div></div>
+            ${hasSiblings ? `<div class="info-card"><div class="ic-icon">✂️</div><div class="ic-value">${Object.values(siblings).flat().length}</div><div class="ic-label">Parcelles sœurs</div></div>` : ''}
+            ${hasChildren ? `<div class="info-card"><div class="ic-icon">🌱</div><div class="ic-value">${Object.values(children).flat().length}</div><div class="ic-label">Descendantes</div></div>` : ''}
         `;
 
-                // Météo
                 const w = await fetchWeather(e.lngLat.lat, e.lngLat.lng, year);
                 if (w) renderWeatherChart(w);
 
-                // Historique — pass the record with full lineage
-                renderHistoryWithRecord(compositeId, props, record);
+                renderHistoryWithRecord(parcelId, props, record);
 
-                // Mini-map
                 if (highlightedFeature) initParcelViz(parcelId, highlightedFeature, props);
 
             } catch (err) {
