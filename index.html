@@ -1804,7 +1804,8 @@
         const groupLabels = new Map();
         let lineageData = null;
         let lineageStats = null;
-        let parentIndex = null;     // Reverse index: parentId+year -> [childIds]
+        let parentIndex = null;
+        let bucketCache = {};  // Cache des buckets déjà chargés: { "44": {parcelles, filiations}, ... }     // Reverse index: parentId+year -> [childIds]
         let compareMode = false;
         let measureMode = false;
         let measurePoints = [];
@@ -2591,69 +2592,160 @@
             } catch (e) { return null; }
         }
 
+        // ── Bucket loader with cache ──
+        async function loadBucket(bucketId) {
+            if (bucketCache[bucketId]) return bucketCache[bucketId];
+            const url = `https://huggingface.co/datasets/Juckles19/iparcel-public/resolve/main/${bucketId}.json`;
+            try {
+                const response = await fetch(url);
+                if (!response.ok) return null;
+                const data = await response.json();
+                bucketCache[bucketId] = data;
+                return data;
+            } catch (e) {
+                console.warn(`[iParcel] Bucket ${bucketId} introuvable`);
+                return null;
+            }
+        }
+
+        // ── Build full lineage by walking parent chain recursively ──
+        async function buildFullLineage(compositeId, maxDepth = 12) {
+            const lineage = {};
+            let currentUid = compositeId;
+            const visited = new Set([currentUid]);
+
+            for (let depth = 0; depth < maxDepth; depth++) {
+                const bucket = currentUid.slice(-2);
+                const data = await loadBucket(bucket);
+                if (!data) break;
+
+                const filiation = data.filiations && data.filiations[currentUid];
+                if (!filiation || !filiation.parents || filiation.parents.length === 0) break;
+
+                // Take best parent (highest overlap)
+                const bestParent = filiation.parents.reduce((a, b) => (b.pct > a.pct) ? b : a);
+                const parentUid = bestParent.uid;
+                if (visited.has(parentUid)) break;
+                visited.add(parentUid);
+
+                const parentYear = parentUid.split('_')[0];
+                const parentIdParcel = parentUid.split('_').slice(1).join('_');
+
+                // Load parent's bucket to get its culture info
+                const parentBucket = parentUid.slice(-2);
+                const parentData = await loadBucket(parentBucket);
+                const parentInfo = parentData && parentData.parcelles && parentData.parcelles[parentUid];
+
+                lineage[parentYear] = {
+                    c: parentInfo ? parentInfo.c : '?',
+                    g: parentInfo ? parentInfo.g : '',
+                    s: parentInfo ? parentInfo.s : null,
+                    cf: bestParent.pct,
+                    p: parentIdParcel,
+                    uid: parentUid,
+                };
+
+                currentUid = parentUid;
+            }
+
+            return lineage;
+        }
+
         // ── Parcel Details ──
         async function showDetails(e, parcelId, props) {
-            // 1. Préparer l'ID composite (Année + ID)
             const year = document.getElementById('year-select').value;
             const compositeId = `${year}_${parcelId}`;
             currentParcelId = compositeId;
 
             console.log(`[iParcel] Recherche : ${compositeId}`);
 
-            // 2. Identifier le bucket (2 derniers chiffres de l'ID)
-            const bucket = compositeId.slice(-2);
-            const url = `https://huggingface.co/datasets/Juckles19/iparcel-public/resolve/main/${bucket}.json`;
-
-            // UI : État de chargement
             document.getElementById('parcel-name').innerHTML = "Chargement...";
             toggleSidebar(true);
 
             try {
-                const response = await fetch(url);
-                if (!response.ok) throw new Error("Fichier partition introuvable");
+                // Load initial bucket
+                const bucket = compositeId.slice(-2);
+                const data = await loadBucket(bucket);
+                if (!data) throw new Error("Fichier partition introuvable");
 
-                const data = await response.json();
+                const parcelInfo = data.parcelles && data.parcelles[compositeId];
 
-                // Extraire les données du bucket
-                const parcelInfo = data.parcelles[compositeId];
-                const filiationInfo = data.filiations[compositeId];
+                // Build full lineage by walking parent chain
+                const lineage = await buildFullLineage(compositeId);
 
-                // Recréer l'objet record pour la compatibilité avec le reste du code
+                // Build record compatible with original format
                 let record = null;
                 if (parcelInfo) {
-                    record = { ...parcelInfo, lineage: {} };
-                    if (filiationInfo && filiationInfo.parents) {
-                        filiationInfo.parents.forEach(p => {
-                            const pYear = p.uid.split('_')[0];
-                            record.lineage[pYear] = { p: p.uid, cf: p.pct };
-                        });
+                    record = {
+                        ...parcelInfo,
+                        c23: parcelInfo.c || props.CODE_CULTU,
+                        l: lineage,
+                        lineage: lineage,
+                    };
+                } else {
+                    // Parcel not in index — use props only
+                    record = {
+                        c: props.CODE_CULTU,
+                        g: props.CODE_GROUP,
+                        s: props.SURF_PARC,
+                        c23: props.CODE_CULTU,
+                        l: lineage,
+                        lineage: lineage,
+                    };
+                }
+
+                // Store in lineageData for compatibility with other functions
+                if (!lineageData) lineageData = {};
+                lineageData[parcelId] = record;
+                lineageData[compositeId] = record;
+
+                // Build parentIndex entries for siblings
+                if (!parentIndex) parentIndex = {};
+                for (const [yr, entry] of Object.entries(lineage)) {
+                    if (entry.p) {
+                        const key = `${entry.p}_${yr}`;
+                        if (!parentIndex[key]) parentIndex[key] = [];
+                        if (!parentIndex[key].includes(parcelId)) parentIndex[key].push(parcelId);
                     }
                 }
 
-                // --- Logique d'affichage (extraite de votre code original) ---
+                // Also index siblings from the bucket filiations
+                for (const [uid, fil] of Object.entries(data.filiations || {})) {
+                    if (!fil.parents) continue;
+                    for (const p of fil.parents) {
+                        const pYear = p.uid.split('_')[0];
+                        const pId = p.uid.split('_').slice(1).join('_');
+                        const childId = uid.split('_').slice(1).join('_');
+                        const key = `${pId}_${pYear}`;
+                        if (!parentIndex[key]) parentIndex[key] = [];
+                        if (!parentIndex[key].includes(childId)) parentIndex[key].push(childId);
+                    }
+                }
+
+                // --- Display ---
                 const cropName = cropLabels[props.CODE_CULTU] || props.CODE_CULTU || "Culture inconnue";
                 const groupName = groupLabels.get(props.CODE_GROUP) || props.CODE_GROUP || "";
-                const lineage = record ? record.lineage : {};
                 const lineageYears = Object.keys(lineage);
-                const yearsTracked = lineageYears.length > 1 ? lineageYears.length + 1 : 1;
+                const yearsTracked = lineageYears.length > 0 ? lineageYears.length + 1 : 1;
 
-                // Mise à jour du titre et de la grille d'infos
                 document.getElementById('parcel-name').innerHTML = `${cropName} <span class="culture-badge">${groupName}</span>`;
 
                 document.getElementById('info-grid').innerHTML = `
-            <div class="info-card"><div class="ic-icon">🆔</div><div class="ic-value" style="font-size:0.75rem;">${compositeId}</div><div class="ic-label">UID Composite</div></div>
+            <div class="info-card"><div class="ic-icon">🆔</div><div class="ic-value" style="font-size:0.75rem;">${parcelId}</div><div class="ic-label">ID Parcelle</div></div>
             <div class="info-card"><div class="ic-icon">📐</div><div class="ic-value">${props.SURF_PARC ? parseFloat(props.SURF_PARC).toFixed(2) : '—'} ha</div><div class="ic-label">Surface</div></div>
-            <div class="info-card"><div class="ic-icon">📅</div><div class="ic-value">${yearsTracked} ans</div><div class="ic-label">Historique</div></div>
+            <div class="info-card"><div class="ic-icon">📅</div><div class="ic-value">${yearsTracked} an${yearsTracked > 1 ? 's' : ''}</div><div class="ic-label">Historique</div></div>
+            <div class="info-card"><div class="ic-icon">🌾</div><div class="ic-value">${props.CODE_CULTU || '—'}</div><div class="ic-label">Code culture</div></div>
         `;
 
-                // Météo, Historique et Mini-Map
+                // Météo
                 const w = await fetchWeather(e.lngLat.lat, e.lngLat.lng, year);
                 if (w) renderWeatherChart(w);
 
-                // On passe explicitement le record à renderHistory
+                // Historique — pass the record with full lineage
                 renderHistoryWithRecord(compositeId, props, record);
 
-                if (highlightedFeature) initParcelViz(compositeId, highlightedFeature, props);
+                // Mini-map
+                if (highlightedFeature) initParcelViz(parcelId, highlightedFeature, props);
 
             } catch (err) {
                 console.error("Erreur de récupération des données :", err);
@@ -2956,7 +3048,6 @@
             const list = document.getElementById('history-list');
             const currentYear = document.getElementById('year-select').value;
 
-            // 1. Reset des indicateurs visuels (Rotation et Strips)
             if (!record) {
                 renderRotationScore(null);
                 renderTimelineStrip(null);
@@ -2964,36 +3055,36 @@
                 return;
             }
 
-            const lineage = record.lineage || {};
+            const lineage = record.lineage || record.l || {};
             const sortedYears = Object.keys(lineage).sort((a, b) => b - a);
 
-            // 2. Préparation des données pour la Timeline et le Score de rotation
+            // Build timeline entries
             const allEntries = [{
                 year: parseInt(currentYear),
-                cultureCode: record.c || props.CODE_CULTU,
+                cultureCode: record.c || record.c23 || props.CODE_CULTU,
                 cultureGroup: record.g || props.CODE_GROUP,
                 isCurrent: true
             }];
-
-            const allCultures = [record.c || props.CODE_CULTU];
+            const allCultures = [record.c || record.c23 || props.CODE_CULTU];
 
             sortedYears.forEach(y => {
                 const entry = lineage[y];
+                const code = entry.c || entry.culture || '—';
                 allEntries.push({
                     year: parseInt(y),
-                    cultureCode: entry.c || '—',
-                    confidence: entry.cf
+                    cultureCode: code,
+                    cultureGroup: entry.g || '',
+                    confidence: entry.cf,
+                    isCurrent: false
                 });
-                allCultures.push(entry.c);
+                allCultures.push(code);
             });
 
-            // 3. Mise à jour des composants visuels
             renderRotationScore(computeRotationScore(allCultures));
             renderTimelineStrip(allEntries.sort((a, b) => a.year - b.year));
 
-            // 4. Génération du HTML de la timeline détaillée
-            const currentCropName = cropLabels[record.c || props.CODE_CULTU] || record.c || props.CODE_CULTU;
-
+            // Detailed timeline
+            const currentCropName = cropLabels[record.c || record.c23 || props.CODE_CULTU] || record.c || props.CODE_CULTU;
             let html = `
         <div class="history-item">
             <div class="timeline-dot"></div>
@@ -3007,34 +3098,39 @@
             </div>
         </div>`;
 
-            let prevCulture = record.c || props.CODE_CULTU;
+            let prevCulture = record.c || record.c23 || props.CODE_CULTU;
 
             html += sortedYears.map(y => {
                 const entry = lineage[y];
-                const code = entry.c || '—';
+                const code = entry.c || entry.culture || '—';
                 const cropName = cropLabels[code] || code;
                 const confidence = entry.cf != null ? Math.round(entry.cf * 100) : null;
-                const cultureChanged = code !== prevCulture && code !== '—';
+                const parentId = entry.p || entry.parent_id || null;
+                const parentUid = entry.uid || (parentId ? `${y}_${parentId}` : null);
+                const surface = entry.s ? parseFloat(entry.s).toFixed(2) + ' ha' : '';
+                const cultureChanged = code !== prevCulture && code !== '—' && prevCulture !== '—';
+                const groupColor = entry.g ? getCultureColor(entry.g) : getCultureColor('');
                 prevCulture = code;
 
                 return `
             <div class="history-item">
-                <div class="timeline-dot past ${confidence < 50 ? 'event-split' : ''}"></div>
+                <div class="timeline-dot past ${confidence !== null && confidence < 50 ? 'event-split' : ''}"></div>
                 <div class="year-badge">
                     ${y} 
-                    ${confidence < 50 ? `<span class="event-tag split">✂️ Découpe probable</span>` : ''}
+                    ${confidence !== null && confidence < 50 ? `<span class="event-tag split">✂️ Découpe probable</span>` : ''}
                     ${cultureChanged ? '<span class="event-tag new">🔄 Changement</span>' : ''}
                 </div>
                 <div class="parent-card">
                     <div class="parent-card-header">
-                        <div class="culture-dot" style="background:${getCultureColor('')}"></div>
+                        <div class="culture-dot" style="background:${groupColor}"></div>
                         <div style="font-weight:600;color:var(--text-main);">${cropName}</div>
                     </div>
+                    ${surface ? `<div style="font-size:0.72rem;color:var(--text-muted);margin-top:2px;">📐 ${surface}</div>` : ''}
                     ${confidence !== null ? `
                         <div class="confidence-bar"><div class="confidence-fill" style="width:${confidence}%"></div></div>
                         <span style="font-size:0.7rem;color:var(--text-muted);">Fiabilité: ${confidence}%</span>
-                        <br><span style="font-size:0.65rem;color:var(--text-muted);cursor:pointer;" onclick="loadParent('${entry.p}')">🔗 Parent: ${entry.p}</span>
                     ` : ''}
+                    ${parentUid ? `<br><span style="font-size:0.65rem;color:var(--text-muted);cursor:pointer;" onclick="loadParent('${parentUid}')">🔗 Parent: ${parentId || parentUid}</span>` : ''}
                 </div>
             </div>`;
             }).join('');
@@ -3102,7 +3198,8 @@
                     const entry = lineage[String(y)];
                     if (entry) {
                         yearData[y] = {
-                            culture: entry.c || entry.culture || '?', group: '',
+                            culture: entry.c || entry.culture || '?',
+                            group: entry.g || '',
                             confidence: entry.cf ?? entry.confidence,
                             parentId: entry.p || entry.parent_id || null, isCurrent: false,
                         };
