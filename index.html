@@ -2579,6 +2579,7 @@
         function toggleSidebar(open) {
             document.getElementById('side-panel').classList.toggle('open', open);
             document.getElementById('map').classList.toggle('sidebar-open', open);
+            if (open) document.getElementById('dashboard-panel').classList.remove('open');
             if (!open) { clearHighlight(); destroyMiniMap(); }
             setTimeout(() => map.resize(), 400);
         }
@@ -2824,7 +2825,7 @@
         // ── Bucket loader with cache ──
         async function loadBucket(bucketId) {
             if (bucketCache[bucketId]) return bucketCache[bucketId];
-            const url = `https://huggingface.co/datasets/Juckles19/iparcel-public/resolve/main/${bucketId}.json`;
+            const url = `https://huggingface.co/datasets/Juckles19/iparcel-public/resolve/main/lineage/${bucketId}.json`;
             try {
                 const response = await fetch(url);
                 if (!response.ok) return null;
@@ -3731,8 +3732,8 @@
         // ═══════════════════════════════════════════════════════════
 
         // ⚠️ REMPLACER par vos clés Supabase
-        const SUPABASE_URL = 'https://ajunaltvnoagvuqosgov.supabase.co';
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFqdW5hbHR2bm9hZ3Z1cW9zZ292Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIyMTM2MTYsImV4cCI6MjA4Nzc4OTYxNn0.lUBd7iDzmajikHWCRmYrF3yTnc-QMdmJf1rUWzdqOSk';
+        const SUPABASE_URL = 'https://YOUR_PROJECT.supabase.co';
+        const SUPABASE_ANON_KEY = 'YOUR_ANON_KEY';
 
         const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -3959,7 +3960,13 @@
             document.getElementById('select-banner').classList.add('hidden');
             document.getElementById('btn-select-mode').classList.remove('active');
             map.getCanvas().style.cursor = '';
-            toggleDashboard();
+            // Ouvrir le dashboard pour voir les résultats
+            const panel = document.getElementById('dashboard-panel');
+            if (!panel.classList.contains('open')) {
+                toggleSidebar(false);
+                panel.classList.add('open');
+            }
+            updateDashboard();
         }
 
         function updateSelectCount() {
@@ -4017,6 +4024,9 @@
         function toggleDashboard() {
             if (!currentUser) { showAuthModal(); return; }
             const panel = document.getElementById('dashboard-panel');
+            const opening = !panel.classList.contains('open');
+            // Fermer le side-panel si on ouvre le dashboard
+            if (opening) toggleSidebar(false);
             panel.classList.toggle('open');
             if (panel.classList.contains('open')) updateDashboard();
         }
