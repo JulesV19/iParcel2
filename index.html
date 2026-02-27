@@ -2184,33 +2184,9 @@
             renderFilterChips();
             updateMapColors();
 
-            try {
-                const response = await fetch("https://huggingface.co/datasets/Juckles19/iparcel-public/resolve/main/lineage.json");
-                if (response.ok) {
-                    lineageData = await response.json();
-                    // Build reverse index: for each (parentId, year) -> list of child parcel ids
-                    parentIndex = {};
-                    for (const [pid, rec] of Object.entries(lineageData)) {
-                        const lin = rec.lineage || rec.l;
-                        if (!lin) continue;
-                        for (const [yr, entry] of Object.entries(lin)) {
-                            const parentId = entry.parent_id || entry.p;
-                            if (!parentId) continue;
-                            const key = `${parentId}_${yr}`;
-                            if (!parentIndex[key]) parentIndex[key] = [];
-                            parentIndex[key].push(pid);
-                        }
-                    }
-                    // Compute global stats
-                    lineageStats = computeLineageStats(lineageData);
-                    console.log(`[iParcel] lineage chargé: ${lineageStats.total} parcelles, ${lineageStats.withHistory} avec historique`);
-                }
-            } catch (e) {
-                console.log("lineage.json non trouvé — mode démo activé.");
-            }
-
-            renderLineageGlobalStats();
         }
+
+        renderLineageGlobalStats();
 
         // ── Legend ──
         function renderLegend() {
@@ -2617,37 +2593,35 @@
 
         // ── Parcel Details ──
         async function showDetails(e, parcelId, props) {
-            // 1. Détermination de l'ID complet (Year_ID) et du bucket
+            // 1. Préparer l'ID composite (Année + ID)
             const year = document.getElementById('year-select').value;
-            // On s'assure d'avoir le format "2023_123456" pour correspondre au JSON
-            const compositeId = parcelId.includes('_') ? parcelId : `${year}_${parcelId}`;
+            const compositeId = `${year}_${parcelId}`;
             currentParcelId = compositeId;
 
-            // Calcul du bucket (2 derniers caractères de l'ID numérique)
-            const bucket = compositeId.slice(-2);
-            const url = `https://huggingface.co/datasets/Juckles19/iparcel-public/resolve/main/${bucket}.json`;
+            console.log(`[iParcel] Recherche : ${compositeId}`);
 
-            // Indicateur visuel de chargement
-            document.getElementById('parcel-name').innerHTML = "Chargement des données...";
+            // 2. Identifier le bucket (2 derniers chiffres de l'ID)
+            const bucket = compositeId.slice(-2);
+            const url = `https://huggingface.co/datasets/Juckles19/iparcel-public/resolve/main/lineage_data/${bucket}.json`;
+
+            // UI : État de chargement
+            document.getElementById('parcel-name').innerHTML = "Chargement...";
             toggleSidebar(true);
 
             try {
                 const response = await fetch(url);
-                if (!response.ok) throw new Error("Bucket introuvable");
-                const bucketData = await response.json();
+                if (!response.ok) throw new Error("Fichier partition introuvable");
 
-                // 2. Extraction des données spécifiques dans le bucket
-                const parcelInfo = bucketData.parcelles[compositeId];
-                const filiationInfo = bucketData.filiations[compositeId];
+                const data = await response.json();
 
-                // 3. Reconstruction du "record" compatible avec ton code actuel
+                // Extraire les données du bucket
+                const parcelInfo = data.parcelles[compositeId];
+                const filiationInfo = data.filiations[compositeId];
+
+                // Recréer l'objet record pour la compatibilité avec le reste du code
                 let record = null;
                 if (parcelInfo) {
-                    record = {
-                        ...parcelInfo,
-                        lineage: {}
-                    };
-                    // On remplit l'objet lineage pour renderHistory
+                    record = { ...parcelInfo, lineage: {} };
                     if (filiationInfo && filiationInfo.parents) {
                         filiationInfo.parents.forEach(p => {
                             const pYear = p.uid.split('_')[0];
@@ -2656,67 +2630,34 @@
                     }
                 }
 
-                // --- Début de ton ancienne logique de calcul (mutations, cultures, etc.) ---
+                // --- Logique d'affichage (extraite de votre code original) ---
                 const cropName = cropLabels[props.CODE_CULTU] || props.CODE_CULTU || "Culture inconnue";
                 const groupName = groupLabels.get(props.CODE_GROUP) || props.CODE_GROUP || "";
-
-                const lineage = record ? (record.lineage || {}) : {};
+                const lineage = record ? record.lineage : {};
                 const lineageYears = Object.keys(lineage);
-                const yearsTracked = lineageYears.length > 0 ? lineageYears.length + 1 : 1;
+                const yearsTracked = lineageYears.length > 1 ? lineageYears.length + 1 : 1;
 
-                let mutationType = 'Stable';
-                let mutationIcon = '🔗';
-                let cultureChanges = 0;
-
-                if (record && lineageYears.length > 0) {
-                    const parentIds = [...new Set(lineageYears.map(y => lineage[y].p).filter(Boolean))];
-                    const hasLowConf = lineageYears.some(y => (lineage[y].cf ?? 1) < 0.5);
-
-                    if (parentIds.length > 1 && hasLowConf) { mutationType = 'Redécoupée'; mutationIcon = '✂️'; }
-                    else if (parentIds.length > 1) { mutationType = 'Remembrée'; mutationIcon = '🔀'; }
-                    else if (hasLowConf) { mutationType = 'Prob. découpe'; mutationIcon = '✂️'; }
-
-                    const currentCode = record.c || props.CODE_CULTU;
-                    let prev = currentCode;
-                    for (const y of lineageYears.sort((a, b) => b - a)) {
-                        const code = lineage[y].c || '';
-                        if (code && code !== prev && prev && prev !== '—') cultureChanges++;
-                        prev = code;
-                    }
-                }
-
-                // Pour les parcelles sœurs, on utilise les infos du bucket
-                let siblingsCount = 0;
-                if (filiationInfo && filiationInfo.parents && filiationInfo.parents.length > 0) {
-                    // On ne peut compter les sœurs que si on chargeait l'index global. 
-                    // Avec le partitionnement, on affiche "Voir Historique" ou on simplifie.
-                    siblingsCount = 0;
-                }
-
-                // 4. Mise à jour de l'interface (UI)
+                // Mise à jour du titre et de la grille d'infos
                 document.getElementById('parcel-name').innerHTML = `${cropName} <span class="culture-badge">${groupName}</span>`;
 
                 document.getElementById('info-grid').innerHTML = `
-            <div class="info-card"><div class="ic-icon">🆔</div><div class="ic-value" style="font-size:0.8rem;">${compositeId}</div><div class="ic-label">Identifiant</div></div>
+            <div class="info-card"><div class="ic-icon">🆔</div><div class="ic-value" style="font-size:0.75rem;">${compositeId}</div><div class="ic-label">UID Composite</div></div>
             <div class="info-card"><div class="ic-icon">📐</div><div class="ic-value">${props.SURF_PARC ? parseFloat(props.SURF_PARC).toFixed(2) : '—'} ha</div><div class="ic-label">Surface</div></div>
             <div class="info-card"><div class="ic-icon">📅</div><div class="ic-value">${yearsTracked} ans</div><div class="ic-label">Historique</div></div>
-            <div class="info-card"><div class="ic-icon">${mutationIcon}</div><div class="ic-value">${mutationType}</div><div class="ic-label">Mutation</div></div>
-            ${cultureChanges > 0 ? `<div class="info-card"><div class="ic-icon">🔄</div><div class="ic-value">${cultureChanges}</div><div class="ic-label">Changements</div></div>` : ''}
         `;
 
-                document.getElementById('field-info').innerHTML = '';
-                loadNotes(compositeId);
-
-                // Météo et Historique
+                // Météo, Historique et Mini-Map
                 const w = await fetchWeather(e.lngLat.lat, e.lngLat.lng, year);
                 if (w) renderWeatherChart(w);
-                renderHistory(compositeId, props, record); // On passe le record ici
+
+                // On passe explicitement le record à renderHistory
+                renderHistoryWithRecord(compositeId, props, record);
 
                 if (highlightedFeature) initParcelViz(compositeId, highlightedFeature, props);
 
             } catch (err) {
-                console.error("Erreur de chargement de la parcelle:", err);
-                document.getElementById('parcel-name').innerHTML = "Erreur de chargement";
+                console.error("Erreur de récupération des données :", err);
+                document.getElementById('parcel-name').innerHTML = "Données indisponibles";
             }
         }
 
