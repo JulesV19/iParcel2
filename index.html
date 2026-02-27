@@ -2301,7 +2301,7 @@
                 // Le protocole pmtiles:// est géré par la librairie pmtiles.js
                 map.addSource(srcId, {
                     type: "vector",
-                    // Correction : ajout de pmtiles:// et remplacement de /blob/ par /resolve/
+                    // Ligne ~810 dans la fonction ensureLayer
                     url: `pmtiles://https://huggingface.co/datasets/Juckles19/iparcel-public/resolve/main/${year}.pmtiles`
                 });
             }
@@ -2617,128 +2617,106 @@
 
         // ── Parcel Details ──
         async function showDetails(e, parcelId, props) {
-            currentParcelId = parcelId;
-            const cropName = cropLabels[props.CODE_CULTU] || props.CODE_CULTU || "Culture inconnue";
-            const groupName = groupLabels.get(props.CODE_GROUP) || props.CODE_GROUP || "";
-
-            // ── Lineage enrichment ──
-            const record = lineageData && lineageData[parcelId];
-            const lineage = record ? (record.lineage || record.l || {}) : {};
-            const lineageYears = Object.keys(lineage);
-            const yearsTracked = lineageYears.length > 0 ? lineageYears.length + 1 : 1;
-
-            // Detect mutation: parent_id changes across years
-            let mutationType = 'Stable';
-            let mutationIcon = '🔗';
-            let cultureChanges = 0;
-            if (record && lineageYears.length > 0) {
-                const parentIds = [...new Set(lineageYears.map(y => lineage[y].p || lineage[y].parent_id).filter(Boolean))];
-                const hasLowConf = lineageYears.some(y => {
-                    const cf = lineage[y].cf ?? lineage[y].confidence;
-                    return cf !== null && cf !== undefined && cf < 0.5;
-                });
-                if (parentIds.length > 1 && hasLowConf) {
-                    mutationType = 'Redécoupée'; mutationIcon = '✂️';
-                } else if (parentIds.length > 1) {
-                    mutationType = 'Remembrée'; mutationIcon = '🔀';
-                } else if (hasLowConf) {
-                    mutationType = 'Prob. découpe'; mutationIcon = '✂️';
-                }
-
-                // Count culture changes
-                const currentCode = record.c23 || record["culture_2023"] || props.CODE_CULTU;
-                let prev = currentCode;
-                for (const y of lineageYears.sort((a, b) => b - a)) {
-                    const code = lineage[y].c || lineage[y].culture || '';
-                    if (code && code !== prev && prev && prev !== '—') cultureChanges++;
-                    prev = code;
-                }
-            }
-
-            // Find siblings count for the most recent lineage year
-            let siblingsCount = 0;
-            if (record && lineageYears.length > 0) {
-                const latestYear = lineageYears.sort((a, b) => b - a)[0];
-                const parentId = lineage[latestYear]?.p || lineage[latestYear]?.parent_id;
-                if (parentId && parentIndex) {
-                    const key = `${parentId}_${latestYear}`;
-                    const sibs = parentIndex[key] || [];
-                    siblingsCount = sibs.filter(id => id !== parcelId).length;
-                }
-            }
-
-            document.getElementById('parcel-name').innerHTML = `
-        ${cropName}
-        <span class="culture-badge">${groupName}</span>
-    `;
-
-            document.getElementById('info-grid').innerHTML = `
-        <div class="info-card">
-            <div class="ic-icon">🆔</div>
-            <div class="ic-value" style="font-size:0.8rem;word-break:break-all;">${parcelId}</div>
-            <div class="ic-label">Identifiant parcelle</div>
-        </div>
-        <div class="info-card">
-            <div class="ic-icon">📐</div>
-            <div class="ic-value">${props.SURF_PARC ? parseFloat(props.SURF_PARC).toFixed(2) : '—'} ha</div>
-            <div class="ic-label">Surface déclarée</div>
-        </div>
-        <div class="info-card">
-            <div class="ic-icon">🌾</div>
-            <div class="ic-value">${props.CODE_CULTU || '—'}</div>
-            <div class="ic-label">Code culture</div>
-        </div>
-        <div class="info-card">
-            <div class="ic-icon">📊</div>
-            <div class="ic-value">${props.CODE_GROUP || '—'}</div>
-            <div class="ic-label">Code groupe</div>
-        </div>
-        <div class="info-card">
-            <div class="ic-icon">📅</div>
-            <div class="ic-value">${yearsTracked} an${yearsTracked > 1 ? 's' : ''}</div>
-            <div class="ic-label">Profondeur historique</div>
-        </div>
-        <div class="info-card">
-            <div class="ic-icon">${mutationIcon}</div>
-            <div class="ic-value" style="font-size:0.85rem;">${mutationType}</div>
-            <div class="ic-label">Mutation parcellaire</div>
-        </div>
-        ${cultureChanges > 0 ? `
-        <div class="info-card">
-            <div class="ic-icon">🔄</div>
-            <div class="ic-value">${cultureChanges}</div>
-            <div class="ic-label">Changement${cultureChanges > 1 ? 's' : ''} de culture</div>
-        </div>` : ''}
-        ${siblingsCount > 0 ? `
-        <div class="info-card">
-            <div class="ic-icon">✂️</div>
-            <div class="ic-value">${siblingsCount}</div>
-            <div class="ic-label">Parcelle${siblingsCount > 1 ? 's' : ''} sœur${siblingsCount > 1 ? 's' : ''}</div>
-        </div>` : ''}
-    `;
-
-            document.getElementById('field-info').innerHTML = '';
-
-            // Basculer sur l'onglet Infos
-            document.querySelectorAll('.side-tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.side-tab-content').forEach(c => c.classList.remove('active'));
-            document.querySelectorAll('.side-tab')[0].classList.add('active');
-            document.getElementById('stab-info').classList.add('active');
-
-            toggleSidebar(true);
-            loadNotes(parcelId);
-
-            // Météo
+            // 1. Détermination de l'ID complet (Year_ID) et du bucket
             const year = document.getElementById('year-select').value;
-            const w = await fetchWeather(e.lngLat.lat, e.lngLat.lng, year);
-            if (w) renderWeatherChart(w);
+            // On s'assure d'avoir le format "2023_123456" pour correspondre au JSON
+            const compositeId = parcelId.includes('_') ? parcelId : `${year}_${parcelId}`;
+            currentParcelId = compositeId;
 
-            // Historique
-            renderHistory(parcelId, props);
+            // Calcul du bucket (2 derniers caractères de l'ID numérique)
+            const bucket = compositeId.slice(-2);
+            const url = `https://huggingface.co/datasets/Juckles19/iparcel-public/resolve/main/${bucket}.json`;
 
-            // Parcel visualization — use the highlighted feature which has geometry
-            if (highlightedFeature) {
-                initParcelViz(parcelId, highlightedFeature, props);
+            // Indicateur visuel de chargement
+            document.getElementById('parcel-name').innerHTML = "Chargement des données...";
+            toggleSidebar(true);
+
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error("Bucket introuvable");
+                const bucketData = await response.json();
+
+                // 2. Extraction des données spécifiques dans le bucket
+                const parcelInfo = bucketData.parcelles[compositeId];
+                const filiationInfo = bucketData.filiations[compositeId];
+
+                // 3. Reconstruction du "record" compatible avec ton code actuel
+                let record = null;
+                if (parcelInfo) {
+                    record = {
+                        ...parcelInfo,
+                        lineage: {}
+                    };
+                    // On remplit l'objet lineage pour renderHistory
+                    if (filiationInfo && filiationInfo.parents) {
+                        filiationInfo.parents.forEach(p => {
+                            const pYear = p.uid.split('_')[0];
+                            record.lineage[pYear] = { p: p.uid, cf: p.pct };
+                        });
+                    }
+                }
+
+                // --- Début de ton ancienne logique de calcul (mutations, cultures, etc.) ---
+                const cropName = cropLabels[props.CODE_CULTU] || props.CODE_CULTU || "Culture inconnue";
+                const groupName = groupLabels.get(props.CODE_GROUP) || props.CODE_GROUP || "";
+
+                const lineage = record ? (record.lineage || {}) : {};
+                const lineageYears = Object.keys(lineage);
+                const yearsTracked = lineageYears.length > 0 ? lineageYears.length + 1 : 1;
+
+                let mutationType = 'Stable';
+                let mutationIcon = '🔗';
+                let cultureChanges = 0;
+
+                if (record && lineageYears.length > 0) {
+                    const parentIds = [...new Set(lineageYears.map(y => lineage[y].p).filter(Boolean))];
+                    const hasLowConf = lineageYears.some(y => (lineage[y].cf ?? 1) < 0.5);
+
+                    if (parentIds.length > 1 && hasLowConf) { mutationType = 'Redécoupée'; mutationIcon = '✂️'; }
+                    else if (parentIds.length > 1) { mutationType = 'Remembrée'; mutationIcon = '🔀'; }
+                    else if (hasLowConf) { mutationType = 'Prob. découpe'; mutationIcon = '✂️'; }
+
+                    const currentCode = record.c || props.CODE_CULTU;
+                    let prev = currentCode;
+                    for (const y of lineageYears.sort((a, b) => b - a)) {
+                        const code = lineage[y].c || '';
+                        if (code && code !== prev && prev && prev !== '—') cultureChanges++;
+                        prev = code;
+                    }
+                }
+
+                // Pour les parcelles sœurs, on utilise les infos du bucket
+                let siblingsCount = 0;
+                if (filiationInfo && filiationInfo.parents && filiationInfo.parents.length > 0) {
+                    // On ne peut compter les sœurs que si on chargeait l'index global. 
+                    // Avec le partitionnement, on affiche "Voir Historique" ou on simplifie.
+                    siblingsCount = 0;
+                }
+
+                // 4. Mise à jour de l'interface (UI)
+                document.getElementById('parcel-name').innerHTML = `${cropName} <span class="culture-badge">${groupName}</span>`;
+
+                document.getElementById('info-grid').innerHTML = `
+            <div class="info-card"><div class="ic-icon">🆔</div><div class="ic-value" style="font-size:0.8rem;">${compositeId}</div><div class="ic-label">Identifiant</div></div>
+            <div class="info-card"><div class="ic-icon">📐</div><div class="ic-value">${props.SURF_PARC ? parseFloat(props.SURF_PARC).toFixed(2) : '—'} ha</div><div class="ic-label">Surface</div></div>
+            <div class="info-card"><div class="ic-icon">📅</div><div class="ic-value">${yearsTracked} ans</div><div class="ic-label">Historique</div></div>
+            <div class="info-card"><div class="ic-icon">${mutationIcon}</div><div class="ic-value">${mutationType}</div><div class="ic-label">Mutation</div></div>
+            ${cultureChanges > 0 ? `<div class="info-card"><div class="ic-icon">🔄</div><div class="ic-value">${cultureChanges}</div><div class="ic-label">Changements</div></div>` : ''}
+        `;
+
+                document.getElementById('field-info').innerHTML = '';
+                loadNotes(compositeId);
+
+                // Météo et Historique
+                const w = await fetchWeather(e.lngLat.lat, e.lngLat.lng, year);
+                if (w) renderWeatherChart(w);
+                renderHistory(compositeId, props, record); // On passe le record ici
+
+                if (highlightedFeature) initParcelViz(compositeId, highlightedFeature, props);
+
+            } catch (err) {
+                console.error("Erreur de chargement de la parcelle:", err);
+                document.getElementById('parcel-name').innerHTML = "Erreur de chargement";
             }
         }
 
