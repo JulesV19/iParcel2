@@ -5839,11 +5839,31 @@
             const container = document.getElementById('dash-exploitation-map');
             if (!container || parcelles.length === 0) return;
 
-            // On récupère la région RÉELLE de la première parcelle de l'exploitation
-            // au lieu d'utiliser le sélecteur global qui a changé
             const exploitationRegion = parcelles[0].region || document.getElementById('region-select').value;
             const year = document.getElementById('year-select').value;
-            // On utilise une région par défaut si "ALL" est sélectionné pour le fond
+            const parcelIds = parcelles.map(p => p.parcel_id);
+            const sourceId = 'src-dash-vector';
+            const pmtilesUrl = `https://huggingface.co/datasets/Juckles19/iparcel-public/resolve/main/${exploitationRegion}_${year}.pmtiles`;
+            const parcelFilter = ['in', ['coalesce', ['get', 'ID_PARCEL'], ['get', 'id_parcel'], ['get', 'ID']], ['literal', parcelIds]];
+
+            function addDashLayers() {
+                if (dashMap.getSource(sourceId)) return;
+                dashMap.addSource(sourceId, {
+                    type: "vector",
+                    url: `pmtiles://${pmtilesUrl}`
+                });
+                dashMap.addLayer({
+                    id: 'lyr-dash-fill', type: 'fill', source: sourceId, "source-layer": "parcelles",
+                    paint: { 'fill-color': '#10b981', 'fill-opacity': 0.5 },
+                    filter: parcelFilter
+                });
+                dashMap.addLayer({
+                    id: 'lyr-dash-outline', type: 'line', source: sourceId, "source-layer": "parcelles",
+                    paint: { 'line-color': '#065f46', 'line-width': 2 },
+                    filter: parcelFilter
+                });
+                fitDashMapBounds(parcelles);
+            }
 
             if (!dashMap) {
                 dashMap = new maplibregl.Map({
@@ -5851,7 +5871,6 @@
                     style: {
                         version: 8,
                         sources: {
-                            // Index 1 est généralement le fond "Routes/Rues" dans ton tableau basemaps
                             "osm-base": { type: "raster", tiles: [basemaps[1].tiles], tileSize: 256 }
                         },
                         layers: [{ id: "osm-layer", type: "raster", source: "osm-base" }]
@@ -5859,41 +5878,15 @@
                     zoom: 12,
                     attributionControl: false
                 });
-
-                const sourceId = 'src-dash-vector';
-                const pmtilesUrl = `https://huggingface.co/datasets/Juckles19/iparcel-public/resolve/main/${exploitationRegion}_${year}.pmtiles`;
-
-                if (!dashMap.getSource(sourceId)) {
-                    dashMap.addSource(sourceId, {
-                        type: "vector",
-                        url: `pmtiles://${pmtilesUrl}`
-                    });
-
-                    dashMap.addLayer({
-                        id: 'lyr-dash-fill', type: 'fill', source: 'src-dash-vector', "source-layer": "parcelles",
-                        paint: {
-                            'fill-color': '#10b981',
-                            'fill-opacity': 0.5
-                        },
-                        // Filtre pour ne montrer que les parcelles de l'exploitation
-                        filter: ['in', ['coalesce', ['get', 'ID_PARCEL'], ['get', 'id_parcel'], ['get', 'ID']], ['literal', parcelIds]]
-                    });
-
-                    dashMap.addLayer({
-                        id: 'lyr-dash-outline', type: 'line', source: 'src-dash-vector', "source-layer": "parcelles",
-                        paint: { 'line-color': '#065f46', 'line-width': 2 },
-                        filter: ['in', ['coalesce', ['get', 'ID_PARCEL'], ['get', 'id_parcel'], ['get', 'ID']], ['literal', parcelIds]]
-                    });
-
-                    fitDashMapBounds(parcelles);
-                };
+                dashMap.on('load', addDashLayers);
             } else {
-                // Mise à jour du filtre si la map existe déjà
-                const parcelIds = parcelles.map(p => p.parcel_id);
                 if (dashMap.getLayer('lyr-dash-fill')) {
-                    dashMap.setFilter('lyr-dash-fill', ['in', ['coalesce', ['get', 'ID_PARCEL'], ['get', 'id_parcel'], ['get', 'ID']], ['literal', parcelIds]]);
-                    dashMap.setFilter('lyr-dash-outline', ['in', ['coalesce', ['get', 'ID_PARCEL'], ['get', 'id_parcel'], ['get', 'ID']], ['literal', parcelIds]]);
-                    dashMap.getSource(sourceId).setUrl(`pmtiles://${pmtilesUrl}`);
+                    dashMap.setFilter('lyr-dash-fill', parcelFilter);
+                    dashMap.setFilter('lyr-dash-outline', parcelFilter);
+                    try {
+                        const src = dashMap.getSource(sourceId);
+                        if (src && src.setUrl) src.setUrl(`pmtiles://${pmtilesUrl}`);
+                    } catch (e) { /* ignore */ }
                 }
                 fitDashMapBounds(parcelles);
             }
