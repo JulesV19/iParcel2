@@ -1949,6 +1949,7 @@
             color: var(--text-main);
             margin: 0 0 8px 0;
         }
+
         .dash-exploitation-map {
             width: 100%;
             height: 220px;
@@ -1958,6 +1959,7 @@
             background: var(--border-light);
             margin-bottom: 4px;
         }
+
         .dash-map-hint {
             font-size: 0.72rem;
             color: var(--text-muted);
@@ -1995,6 +1997,7 @@
             font-weight: 600;
             font-size: 0.82rem;
         }
+
         .parcel-list-item .pli-name-input {
             width: 100%;
             margin-top: 4px;
@@ -2005,6 +2008,7 @@
             background: var(--panel-bg);
             color: var(--text-main);
         }
+
         .parcel-list-item .pli-name-input::placeholder {
             color: var(--text-muted);
         }
@@ -5400,10 +5404,13 @@
         }
 
         function initOrUpdateDashMap(parcelles) {
-            const withCoords = parcelles.filter(p => p.centroid_lon != null && p.centroid_lat != null);
-            if (withCoords.length === 0) return;
             const container = document.getElementById('dash-exploitation-map');
-            if (!container) return;
+            if (!container || parcelles.length === 0) return;
+
+            const region = document.getElementById('region-select').value;
+            const year = document.getElementById('year-select').value;
+            // On utilise une région par défaut si "ALL" est sélectionné pour le fond du dashboard
+            const effectiveRegion = region === "ALL" ? "BRETAGNE" : region;
 
             if (!dashMap) {
                 dashMap = new maplibregl.Map({
@@ -5411,56 +5418,49 @@
                     style: {
                         version: 8,
                         sources: {
-                            basemap: { type: 'raster', tiles: [basemaps[0].tiles], tileSize: 256 }
+                            // Fond de carte Rues (non satellite)
+                            "basemap-dash": { type: "raster", tiles: [basemaps[1].tiles], tileSize: 256 }
                         },
-                        layers: [{ id: 'basemap-layer', type: 'raster', source: 'basemap' }]
+                        layers: [{ id: "base-layer", type: "raster", source: "basemap-dash" }]
                     },
-                    center: [withCoords[0].centroid_lon, withCoords[0].centroid_lat],
                     zoom: 12,
-                    attributionControl: false,
-                    interactive: true
+                    attributionControl: false
                 });
-                dashMap.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+
                 dashMap.on('load', () => {
-                    const features = withCoords.map(p => ({
-                        type: 'Feature',
-                        geometry: { type: 'Point', coordinates: [p.centroid_lon, p.centroid_lat] },
-                        properties: { parcel_id: p.parcel_id }
-                    }));
-                    dashMap.addSource('dash-parcels', {
-                        type: 'geojson',
-                        data: { type: 'FeatureCollection', features }
+                    const parcelIds = parcelles.map(p => p.parcel_id);
+
+                    dashMap.addSource('src-dash-vector', {
+                        type: "vector",
+                        url: `pmtiles://https://huggingface.co/datasets/Juckles19/iparcel-public/resolve/main/${effectiveRegion}_${year}.pmtiles`
                     });
+
                     dashMap.addLayer({
-                        id: 'dash-parcels-fill',
-                        type: 'circle',
-                        source: 'dash-parcels',
+                        id: 'lyr-dash-fill', type: 'fill', source: 'src-dash-vector', "source-layer": "parcelles",
                         paint: {
-                            'circle-radius': 10,
-                            'circle-color': '#10b981',
-                            'circle-opacity': 0.85,
-                            'circle-stroke-color': '#fff',
-                            'circle-stroke-width': 2
-                        }
+                            'fill-color': '#10b981',
+                            'fill-opacity': 0.5
+                        },
+                        // Filtre pour ne montrer que les parcelles de l'exploitation
+                        filter: ['in', ['coalesce', ['get', 'ID_PARCEL'], ['get', 'id_parcel'], ['get', 'ID']], ['literal', parcelIds]]
                     });
-                    dashMap.getCanvas().style.cursor = 'pointer';
-                    dashMap.on('click', 'dash-parcels-fill', (e) => {
-                        if (e.features && e.features[0]) {
-                            const coords = e.features[0].geometry.coordinates.slice();
-                            if (map && mapReady) map.flyTo({ center: coords, zoom: 16, duration: 1200 });
-                        }
+
+                    dashMap.addLayer({
+                        id: 'lyr-dash-outline', type: 'line', source: 'src-dash-vector', "source-layer": "parcelles",
+                        paint: { 'line-color': '#065f46', 'line-width': 2 },
+                        filter: ['in', ['coalesce', ['get', 'ID_PARCEL'], ['get', 'id_parcel'], ['get', 'ID']], ['literal', parcelIds]]
                     });
-                    fitDashMapBounds(withCoords);
+
+                    fitDashMapBounds(parcelles);
                 });
             } else {
-                const features = withCoords.map(p => ({
-                    type: 'Feature',
-                    geometry: { type: 'Point', coordinates: [p.centroid_lon, p.centroid_lat] },
-                    properties: { parcel_id: p.parcel_id }
-                }));
-                const src = dashMap.getSource('dash-parcels');
-                if (src) src.setData({ type: 'FeatureCollection', features });
-                fitDashMapBounds(withCoords);
+                // Mise à jour du filtre si la map existe déjà
+                const parcelIds = parcelles.map(p => p.parcel_id);
+                if (dashMap.getLayer('lyr-dash-fill')) {
+                    dashMap.setFilter('lyr-dash-fill', ['in', ['coalesce', ['get', 'ID_PARCEL'], ['get', 'id_parcel'], ['get', 'ID']], ['literal', parcelIds]]);
+                    dashMap.setFilter('lyr-dash-outline', ['in', ['coalesce', ['get', 'ID_PARCEL'], ['get', 'id_parcel'], ['get', 'ID']], ['literal', parcelIds]]);
+                }
+                fitDashMapBounds(parcelles);
             }
         }
 
@@ -5628,18 +5628,20 @@
                     const displayName = rawName ? String(rawName).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;') : cultureName;
                     const hasCoords = p.centroid_lon && p.centroid_lat;
                     const safeNotes = (p.notes || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-                    return `<div class="parcel-list-item" style="cursor:${hasCoords ? 'pointer' : 'default'};animation:fadeIn 0.3s ease ${i * 0.03}s both;" data-parcel-id="${p.parcel_id}"
-                        ${hasCoords ? `onclick="if(!event.target.closest('button') && !event.target.closest('.pli-name-input')) map.flyTo({center:[${p.centroid_lon},${p.centroid_lat}],zoom:16,duration:1200})"` : ''}>
-                        <div class="pli-color" style="background:${color}"></div>
-                        <div class="pli-info">
-                            <div class="pli-name">${displayName}</div>
-                            <input type="text" class="pli-name-input" placeholder="Nom de la parcelle" value="${safeNotes}" data-parcel-id="${p.parcel_id}"
-                                onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter')this.blur()"
-                                onblur="updateParcelName('${p.parcel_id}', this.value.trim())">
-                            <div class="pli-meta">#${p.parcel_id} · ${p.surf_parc ? p.surf_parc.toFixed(2) + ' ha' : '—'}</div>
-                        </div>
-                        <button class="pli-remove" onclick="event.stopPropagation();removeParcelFromExploitation('${p.parcel_id}')" title="Retirer">✕</button>
-                    </div>`;
+                    return `<div class="parcel-list-item" style="cursor:${hasCoords ? 'pointer' : 'default'};" data-parcel-id="${p.parcel_id}"
+    ${hasCoords ? `onclick="if(!event.target.closest('button') && !event.target.closest('.pli-name-input')) map.flyTo({center:[${p.centroid_lon},${p.centroid_lat}],zoom:16,duration:1200})"` : ''}>
+    <div class="pli-color" style="background:${color}"></div>
+    <div class="pli-info">
+        <div class="pli-name" style="font-size: 0.85rem; font-weight: 700;">${cultureName}</div>
+        
+        <input type="text" class="pli-name-input" placeholder="Donner un nom (ex: Champ du Moulin)" value="${safeNotes}" data-parcel-id="${p.parcel_id}"
+            onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter')this.blur()"
+            onblur="updateParcelName('${p.parcel_id}', this.value.trim())">
+            
+        <div class="pli-meta">#${p.parcel_id} · ${p.surf_parc ? p.surf_parc.toFixed(2) + ' ha' : '—'}</div>
+    </div>
+    <button class="pli-remove" onclick="event.stopPropagation();removeParcelFromExploitation('${p.parcel_id}')" title="Retirer">✕</button>
+</div>`;
                 }).join('');
             }
         }
