@@ -5497,7 +5497,7 @@
         async function updateDashboard() {
             if (!currentExploitation) return;
 
-            // Barre utilisateur
+            // 1. Barre Utilisateur
             document.getElementById('dash-user-bar').innerHTML = currentUser ? `
         <div class="user-bar">
             <span>👤</span>
@@ -5505,48 +5505,63 @@
             <button class="top-btn" onclick="logout()" style="font-size:0.68rem;">Déconnexion</button>
         </div>` : '';
 
+            // 2. Nom de l'exploitation
             document.getElementById('exploitation-name').value = currentExploitation.name || '';
 
             const parcelles = exploitationParcelles;
+            const listEl = document.getElementById('dash-parcel-list');
+
             if (parcelles.length === 0) {
-                renderEmptyDashboard();
+                listEl.innerHTML = `
+            <div style="text-align:center;padding:30px 20px;">
+                <div style="font-size:2.5rem;margin-bottom:8px;opacity:0.3;">🏠</div>
+                <p style="color:var(--text-muted);font-size:0.82rem;margin:0 0 12px;">Votre exploitation est vide</p>
+                <button class="auth-btn" onclick="toggleSelectMode()" style="width:auto;padding:8px 20px;font-size:0.8rem;border-radius:8px;">
+                    + Ajouter des parcelles
+                </button>
+            </div>`;
+                updateStats(0, 0, 0, 0, '—', '—'); // Reset stats
                 return;
             }
 
-            // --- CORRECTION RÉGION & STATS ---
-            // On récupère la région de la première parcelle (ou celle du sélecteur par défaut)
+            // --- CORRECTION RÉGION : Chargement des données historiques ---
+            // On utilise la région de la première parcelle de l'exploitation
             const exploitationRegion = parcelles[0].region || document.getElementById('region-select').value;
 
-            // On s'assure que les données historiques de cette région sont chargées
-            await ensureRegionData(exploitationRegion);
-            // ---------------------------------
+            // On charge les buckets JSON pour permettre le calcul des stats (rotation/années)
+            for (const p of parcelles.slice(0, 15)) {
+                const bid = getBucketId(p.parcel_id);
+                const cacheKey = `${exploitationRegion}_${bid}`;
+                if (!bucketCache[cacheKey]) {
+                    try { await loadBucket(bid, exploitationRegion); } catch (e) { console.warn(e); }
+                }
+            }
 
+            // 3. Calcul des Statistiques
             const totalSurface = parcelles.reduce((s, p) => s + (p.surf_parc || 0), 0);
             const avgSurface = totalSurface / parcelles.length;
-            const cultures = [...new Set(parcelles.map(p => p.code_cultu).filter(Boolean))];
+            const culturesIds = [...new Set(parcelles.map(p => p.code_cultu).filter(Boolean))];
 
             let rotationScores = [];
             let yearsCounts = [];
 
             parcelles.forEach(p => {
-                // Accès aux données de filiation via le bucket spécifique à la région de la parcelle
-                const bucketId = getBucketId(p.parcel_id);
-                const cacheKey = `${exploitationRegion}_${bucketId}`;
-                const compositeId = `${document.getElementById('year-select').value}_${p.parcel_id}`;
+                const bid = getBucketId(p.parcel_id);
+                const cacheKey = `${exploitationRegion}_${bid}`;
+                const year = document.getElementById('year-select').value;
+                const compositeId = `${year}_${p.parcel_id}`;
 
-                const parcelData = bucketCache[cacheKey]?.parcelles?.[compositeId];
-                const filiations = bucketCache[cacheKey]?.filiations?.[compositeId];
+                const data = bucketCache[cacheKey];
+                if (data && data.filiations && data.filiations[compositeId]) {
+                    const f = data.filiations[compositeId];
+                    const parents = f.parents || [];
+                    yearsCounts.push(1 + parents.length);
 
-                if (parcelData && filiations) {
-                    // Simulation simplifiée du score de rotation basé sur les parents connus
-                    const parents = filiations.parents || [];
-                    const yearsTracked = 1 + parents.length;
-                    yearsCounts.push(yearsTracked);
-
-                    // Calcul basique de diversité (à affiner selon votre structure genealogy.py)
-                    const uniqueCrops = new Set([parcelData.c]);
-                    if (uniqueCrops.size >= 1) {
-                        rotationScores.push(Math.round((uniqueCrops.size / yearsTracked) * 10));
+                    // Calcul simplifié du score de rotation (basé sur la diversité des parents)
+                    const history = [p.code_cultu, ...parents.map(pa => pa.c)].filter(Boolean);
+                    if (history.length >= 2) {
+                        const unique = new Set(history).size;
+                        rotationScores.push(Math.round((unique / history.length) * 10));
                     }
                 }
             });
@@ -5555,38 +5570,51 @@
             const rotColor = avgRotation === '—' ? 'var(--text-muted)' : parseFloat(avgRotation) > 6 ? '#10b981' : parseFloat(avgRotation) > 3 ? '#f59e0b' : '#ef4444';
             const avgYears = yearsCounts.length > 0 ? (yearsCounts.reduce((a, b) => a + b, 0) / yearsCounts.length).toFixed(1) : '—';
 
-            // Rendu des stats
+            // Rendu des blocs stats
             document.getElementById('dash-stats').innerHTML = `
         <div class="dash-stat"><div class="ds-value">${parcelles.length}</div><div class="ds-label">Parcelles</div></div>
         <div class="dash-stat"><div class="ds-value">${totalSurface.toFixed(1)} ha</div><div class="ds-label">Surface totale</div></div>
         <div class="dash-stat"><div class="ds-value">${avgYears}</div><div class="ds-label">Années moy.</div></div>
         <div class="dash-stat"><div class="ds-value" style="color:${rotColor}">${avgRotation}<span style="font-size:0.7rem;color:var(--text-muted)">/10</span></div><div class="ds-label">Rotation</div></div>`;
 
-            // Liste des parcelles (Culture en titre, Nom en sous-titre)
-            const listEl = document.getElementById('dash-parcel-list');
+            // 4. Liste des parcelles (Culture en titre + Nom personnalisé)
             listEl.innerHTML = parcelles.map(p => {
                 const color = cultureColors[p.code_group] || '#9ca3af';
-                const cultureName = cropLabels[p.code_cultu] || p.code_cultu || 'Inconnue';
+                const cultureName = cropLabels[p.code_cultu] || p.code_cultu || 'Culture inconnue';
                 const safeNotes = (p.notes || "").replace(/"/g, '&quot;');
+                const hasCoords = p.centroid_lon && p.centroid_lat;
 
                 return `
-        <div class="parcel-list-item" onclick="handleParcelListClick('${p.parcel_id}', ${p.centroid_lon}, ${p.centroid_lat})">
+        <div class="parcel-list-item" 
+             style="cursor:${hasCoords ? 'pointer' : 'default'};"
+             onclick="handleParcelListClick('${p.parcel_id}', ${p.centroid_lon}, ${p.centroid_lat})">
             <div class="pli-color" style="background:${color}"></div>
             <div class="pli-info">
-                <div class="pli-name" style="font-weight:700; color:var(--text-main);">${cultureName}</div>
+                <div class="pli-name" style="font-weight:700; color:var(--text-main); font-size:0.85rem;">
+                    ${cultureName}
+                </div>
                 <input type="text" class="pli-name-input" 
                        value="${safeNotes}" 
-                       placeholder="Nommer la parcelle..."
-                       onclick="event.stopPropagation()"
+                       placeholder="Donner un nom (ex: Champ du Moulin)" 
+                       onclick="event.stopPropagation()" 
                        onblur="updateParcelName('${p.parcel_id}', this.value.trim())"
-                       style="display:block; width:100%; border:none; background:transparent; font-size:0.75rem; color:var(--text-muted); margin-top:2px;">
-                <div class="pli-meta">ID: ${p.parcel_id} • ${p.surf_parc?.toFixed(2)} ha</div>
+                       style="display:block; width:100%; border:none; background:transparent; font-size:0.75rem; color:var(--text-muted); margin-top:2px; padding:0;">
+                <div class="pli-meta">ID: ${p.parcel_id} • ${p.surf_parc ? p.surf_parc.toFixed(2) + ' ha' : ''}</div>
             </div>
-            <button class="pli-remove" onclick="event.stopPropagation(); removeParcelFromExploitation('${p.parcel_id}')">✕</button>
+            <button class="pli-remove" onclick="event.stopPropagation(); removeParcelFromExploitation('${p.parcel_id}')" title="Supprimer">✕</button>
         </div>`;
             }).join('');
 
-            setTimeout(() => initOrUpdateDashMap(parcelles), 150);
+            // 5. Mise à jour de la minimap du dashboard
+            setTimeout(() => initOrUpdateDashMap(parcelles), 200);
+        }
+
+        // Fonction utilitaire pour extraire le bucket ID (si absente de votre code)
+        function getBucketId(id) {
+            if (!id) return "00";
+            const parts = String(id).split('_');
+            const lastPart = parts[parts.length - 1];
+            return lastPart.slice(-2).padStart(2, '0');
         }
 
         // ── Dark Mode ──
@@ -5837,6 +5865,12 @@
                     filter: ['==', ['coalesce', ['get', 'ID_PARCEL'], ['get', 'id_parcel']], id]
                 });
             }
+        }
+        function getBucketId(id) {
+            if (!id) return "00";
+            const parts = id.split('_');
+            const num = parts[parts.length - 1];
+            return num.slice(-2).padStart(2, '0');
         }
     </script>
 </body>
