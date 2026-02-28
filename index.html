@@ -2430,8 +2430,7 @@
                 Bienvenue sur <strong>iParcel</strong>. <br>
                 Cette application est actuellement en cours de développement.
                 Certaines <strong>fonctionnalités</strong> (Heatmap, Historique, Exploitation) sont en phase de test.
-                La seule région disponible pour le moment est la <strong>Bretagne</strong>, les données sur la France
-                entière seront bientôt disponibles !
+                Quelques régions sont déjà disponibles, les données sur la France entière seront bientôt disponibles !
             </p>
 
             <div style="text-align: left; margin-top: 20px;">
@@ -2622,21 +2621,21 @@
             <div class="btn-separator"></div>
             <!-- Exploitation -->
             <div class="btn-group">
-                <button class="top-btn exploitation-btn" id="btn-select-mode" onclick="toggleSelectMode()"
-                    title="Ajouter des parcelles à l'exploitation" aria-label="Ajouter des parcelles à l'exploitation">
+                <!-- Bouton maison: ouvre le dashboard exploitation -->
+                <button class="top-btn exploitation-btn" id="btn-dashboard" onclick="toggleDashboard()"
+                    title="Dashboard de l'exploitation" aria-label="Ouvrir le tableau de bord de l'exploitation">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
                         <polyline points="9 22 9 12 15 12 15 22" />
                     </svg>
                     <span class="btn-label">Exploitation</span>
                 </button>
-                <button class="top-btn" id="btn-dashboard" onclick="toggleDashboard()"
-                    title="Dashboard de l'exploitation" aria-label="Ouvrir le tableau de bord de l'exploitation">
+                <!-- Bouton + : mode ajout de parcelles -->
+                <button class="top-btn" id="btn-select-mode" onclick="toggleSelectMode()"
+                    title="Ajouter des parcelles à l'exploitation" aria-label="Ajouter des parcelles à l'exploitation">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="3" y="3" width="7" height="7" rx="1" />
-                        <rect x="14" y="3" width="7" height="7" rx="1" />
-                        <rect x="3" y="14" width="7" height="7" rx="1" />
-                        <rect x="14" y="14" width="7" height="7" rx="1" />
+                        <line x1="12" y1="5" x2="12" y2="19" />
+                        <line x1="5" y1="12" x2="19" y2="12" />
                     </svg>
                 </button>
             </div>
@@ -5371,6 +5370,7 @@
 
             // Compute average rotation score
             let rotationScores = [];
+            let yearsCounts = [];
             parcelles.forEach(p => {
                 const rec = lineageData && lineageData[p.parcel_id];
                 if (rec) {
@@ -5380,15 +5380,19 @@
                         const unique = new Set(allCodes).size;
                         rotationScores.push(Math.round((unique / allCodes.length) * 10));
                     }
+                    yearsCounts.push(1 + Object.keys(lin).length);
                 }
             });
             const avgRotation = rotationScores.length > 0 ? (rotationScores.reduce((a, b) => a + b, 0) / rotationScores.length).toFixed(1) : '—';
             const rotColor = avgRotation === '—' ? 'var(--text-muted)' : parseFloat(avgRotation) > 6 ? '#10b981' : parseFloat(avgRotation) > 3 ? '#f59e0b' : '#ef4444';
+            const avgYears = yearsCounts.length > 0 ? (yearsCounts.reduce((a, b) => a + b, 0) / yearsCounts.length).toFixed(1) : '—';
 
             document.getElementById('dash-stats').innerHTML = `
                 <div class="dash-stat"><div class="ds-value">${parcelles.length}</div><div class="ds-label">Parcelles</div></div>
                 <div class="dash-stat"><div class="ds-value">${totalSurface.toFixed(1)} ha</div><div class="ds-label">Surface totale</div></div>
-                <div class="dash-stat"><div class="ds-value">${cultures.length}</div><div class="ds-label">Cultures</div></div>
+                <div class="dash-stat"><div class="ds-value">${avgSurface.toFixed(1)} ha</div><div class="ds-label">Surface moyenne</div></div>
+                <div class="dash-stat"><div class="ds-value">${cultures.length}</div><div class="ds-label">Cultures différentes</div></div>
+                <div class="dash-stat"><div class="ds-value">${avgYears}</div><div class="ds-label">Années moy. de suivi</div></div>
                 <div class="dash-stat"><div class="ds-value" style="color:${rotColor}">${avgRotation}<span style="font-size:0.7rem;color:var(--text-muted)">/10</span></div><div class="ds-label">Score rotation moy.</div></div>`;
 
             // Culture distribution chart
@@ -5454,7 +5458,7 @@
             }
             if (parcelles.length === 0) {
                 alertsHtml += `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px;">
-                    <div style="font-size:0.82rem;color:#166534;">Cliquez sur <strong>🏠 Exploitation</strong> puis sélectionnez vos parcelles sur la carte.</div>
+                    <div style="font-size:0.82rem;color:#166534;">Cliquez sur le bouton <strong>+</strong> en haut puis sélectionnez vos parcelles sur la carte.</div>
                 </div>`;
             }
             document.getElementById('dash-alerts').innerHTML = alertsHtml;
