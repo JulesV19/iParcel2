@@ -1450,12 +1450,18 @@
         .suggestions button:last-child {
             border-bottom: none;
         }
-        .suggestions-loading, .suggestions-empty, .suggestions-error {
+
+        .suggestions-loading,
+        .suggestions-empty,
+        .suggestions-error {
             padding: 12px 14px;
             font-size: 0.88rem;
             color: var(--text-muted);
         }
-        .suggestions-error { color: #b91c1c; }
+
+        .suggestions-error {
+            color: #b91c1c;
+        }
 
         .sug-icon {
             font-size: 14px;
@@ -1528,6 +1534,7 @@
             color: rgba(255, 255, 255, 0.5);
             pointer-events: none;
         }
+
         .shortcuts-hint kbd {
             background: rgba(255, 255, 255, 0.15);
             padding: 1px 5px;
@@ -1867,7 +1874,10 @@
             font-size: 0.88rem;
             color: var(--text-secondary);
         }
-        .first-visit-banner.hidden { display: none !important; }
+
+        .first-visit-banner.hidden {
+            display: none !important;
+        }
 
         /* ── Dashboard exploitation ── */
         .dashboard-panel {
@@ -2012,7 +2022,7 @@
                 width: 90%;
                 max-width: 400px;
                 right: -90%;
-                box-shadow: -8px 0 24px rgba(0,0,0,0.15);
+                box-shadow: -8px 0 24px rgba(0, 0, 0, 0.15);
             }
 
             #side-panel.open {
@@ -2031,7 +2041,7 @@
                 width: 44px;
                 height: 44px;
                 border-radius: 12px;
-                box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+                box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
             }
 
             .tool-panel {
@@ -2057,6 +2067,7 @@
             visibility: hidden;
             pointer-events: none;
         }
+
         .loader-error-state {
             position: absolute;
             inset: 0;
@@ -2069,9 +2080,21 @@
             text-align: center;
             padding: 20px;
         }
-        .loader-error-state.hidden { display: none !important; }
-        .loader-error-state p { margin: 0; font-size: 1rem; }
-        #loader.loader-error .loader-grid, #loader.loader-error .loader-logo, #loader.loader-error .loader-progress-wrap { display: none !important; }
+
+        .loader-error-state.hidden {
+            display: none !important;
+        }
+
+        .loader-error-state p {
+            margin: 0;
+            font-size: 1rem;
+        }
+
+        #loader.loader-error .loader-grid,
+        #loader.loader-error .loader-logo,
+        #loader.loader-error .loader-progress-wrap {
+            display: none !important;
+        }
 
         .loader-grid {
             position: absolute;
@@ -2283,22 +2306,57 @@
                 opacity: 0.4;
             }
 
-        40% {
-            transform: translateY(-5px);
-            opacity: 1;
+            40% {
+                transform: translateY(-5px);
+                opacity: 1;
+            }
         }
-    }
 
-    /* ── Side panel loading / erreur ── */
-    .parcel-loading, .parcel-error { margin: 8px 0 12px; font-size: 0.88rem; }
-    .parcel-loading { display: flex; align-items: center; gap: 10px; color: var(--text-muted); }
-    .parcel-loading.hidden, .parcel-error.hidden { display: none !important; }
-    .parcel-spinner { width: 18px; height: 18px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: parcelSpin 0.8s linear infinite; }
-    @keyframes parcelSpin { to { transform: rotate(360deg); } }
-    .parcel-error p { margin: 0 0 10px; color: var(--text-secondary); }
-    .parcel-error .top-btn { padding: 6px 14px; font-size: 0.85rem; }
+        /* ── Side panel loading / erreur ── */
+        .parcel-loading,
+        .parcel-error {
+            margin: 8px 0 12px;
+            font-size: 0.88rem;
+        }
 
-    /* ── Heatmap Styles ── */
+        .parcel-loading {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: var(--text-muted);
+        }
+
+        .parcel-loading.hidden,
+        .parcel-error.hidden {
+            display: none !important;
+        }
+
+        .parcel-spinner {
+            width: 18px;
+            height: 18px;
+            border: 2px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: parcelSpin 0.8s linear infinite;
+        }
+
+        @keyframes parcelSpin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .parcel-error p {
+            margin: 0 0 10px;
+            color: var(--text-secondary);
+        }
+
+        .parcel-error .top-btn {
+            padding: 6px 14px;
+            font-size: 0.85rem;
+        }
+
+        /* ── Heatmap Styles ── */
         .heatmap-grid {
             display: flex;
             flex-direction: column;
@@ -2524,31 +2582,36 @@
         <div class="top-actions">
             <!-- Outils carte -->
             <div class="btn-group">
-                <button class="top-btn" id="btn-toggle-panel" onclick="toggleLeftPanel()" title="Panneau de contrôle" aria-label="Ouvrir ou fermer le panneau de contrôle">
+                <button class="top-btn" id="btn-toggle-panel" onclick="toggleLeftPanel()" title="Panneau de contrôle"
+                    aria-label="Ouvrir ou fermer le panneau de contrôle">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <rect x="3" y="3" width="18" height="18" rx="2" />
                         <line x1="9" y1="3" x2="9" y2="21" />
                     </svg>
                 </button>
-                <button class="top-btn" id="btn-measure" onclick="toggleMeasure()" title="Mesurer une distance" aria-label="Mesurer une distance sur la carte">
+                <button class="top-btn" id="btn-measure" onclick="toggleMeasure()" title="Mesurer une distance"
+                    aria-label="Mesurer une distance sur la carte">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M2 12h20M12 2v20M6 8l-4 4 4 4M18 8l4 4-4 4" />
                     </svg>
                 </button>
-                <button class="top-btn" id="btn-compare" onclick="toggleCompare()" title="Comparer deux années" aria-label="Comparer deux années">
+                <button class="top-btn" id="btn-compare" onclick="toggleCompare()" title="Comparer deux années"
+                    aria-label="Comparer deux années">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <rect x="2" y="3" width="8" height="18" rx="1" />
                         <rect x="14" y="3" width="8" height="18" rx="1" />
                     </svg>
                 </button>
-                <button class="top-btn" id="btn-screenshot" onclick="takeScreenshot()" title="Capture d'écran" aria-label="Prendre une capture d'écran">
+                <button class="top-btn" id="btn-screenshot" onclick="takeScreenshot()" title="Capture d'écran"
+                    aria-label="Prendre une capture d'écran">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <rect x="3" y="5" width="18" height="14" rx="2" />
                         <circle cx="12" cy="12" r="3" />
                         <path d="M8 5V3h8v2" />
                     </svg>
                 </button>
-                <button class="top-btn" id="btn-basemap" onclick="cycleBasemap()" title="Changer le fond de carte" aria-label="Changer le fond de carte">
+                <button class="top-btn" id="btn-basemap" onclick="cycleBasemap()" title="Changer le fond de carte"
+                    aria-label="Changer le fond de carte">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="12" cy="12" r="10" />
                         <path
@@ -2579,7 +2642,8 @@
             </div>
             <div class="btn-separator"></div>
             <!-- User -->
-            <button class="top-btn auth-top-btn" id="btn-auth" onclick="showAuthModal()" title="Se connecter" aria-label="Se connecter ou créer un compte">
+            <button class="top-btn auth-top-btn" id="btn-auth" onclick="showAuthModal()" title="Se connecter"
+                aria-label="Se connecter ou créer un compte">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                     <circle cx="12" cy="7" r="4" />
@@ -2587,7 +2651,8 @@
                 <span class="btn-label" id="auth-label">Connexion</span>
             </button>
             <!-- Dark mode -->
-            <button class="top-btn" id="btn-darkmode" onclick="toggleDarkMode()" title="Mode sombre" aria-label="Activer ou désactiver le mode sombre">🌙</button>
+            <button class="top-btn" id="btn-darkmode" onclick="toggleDarkMode()" title="Mode sombre"
+                aria-label="Activer ou désactiver le mode sombre">🌙</button>
         </div>
     </div>
 
@@ -2619,7 +2684,8 @@
     <!-- Bannière première visite -->
     <div class="first-visit-banner hidden" id="first-visit-banner">
         <span>Choisissez une région et une année, puis cliquez sur une parcelle pour voir son historique.</span>
-        <button type="button" class="top-btn" style="padding:6px 14px;font-size:0.8rem;" onclick="dismissFirstVisit()">Compris</button>
+        <button type="button" class="top-btn" style="padding:6px 14px;font-size:0.8rem;"
+            onclick="dismissFirstVisit()">Compris</button>
     </div>
 
     <!-- Select Mode Banner -->
@@ -2811,10 +2877,17 @@
         <button class="close-btn" onclick="toggleSidebar(false)" aria-label="Fermer le panneau">✕</button>
         <div class="panel-header-right">
             <h2 id="parcel-name" class="parcel-title" aria-live="polite">Analyse parcellaire</h2>
-            <div id="parcel-loading" class="parcel-loading hidden"><span class="parcel-spinner"></span> Chargement des données…</div>
-            <div id="parcel-error" class="parcel-error hidden"><p id="parcel-error-msg"></p><button type="button" class="top-btn" id="parcel-retry-btn" onclick="retryParcelDetails()">Réessayer</button></div>
+            <div id="parcel-loading" class="parcel-loading hidden"><span class="parcel-spinner"></span> Chargement des
+                données…</div>
+            <div id="parcel-error" class="parcel-error hidden">
+                <p id="parcel-error-msg"></p><button type="button" class="top-btn" id="parcel-retry-btn"
+                    onclick="retryParcelDetails()">Réessayer</button>
+            </div>
             <div id="field-info" style="margin: 12px 0; font-size: 0.9rem;">
-                <p style="color:var(--text-muted);">Sélectionnez une parcelle sur la carte pour afficher son historique et sa filiation. <a href="javascript:void(0)" id="focus-search-link" onclick="document.getElementById('address-input').focus(); return false;">Aller à un lieu</a></p>
+                <p style="color:var(--text-muted);">Sélectionnez une parcelle sur la carte pour afficher son historique
+                    et sa filiation. <a href="javascript:void(0)" id="focus-search-link"
+                        onclick="document.getElementById('address-input').focus(); return false;">Aller à un lieu</a>
+                </p>
             </div>
         </div>
         <div class="panel-content">
@@ -3689,7 +3762,7 @@
         }
 
         function dismissFirstVisit() {
-            try { localStorage.setItem('iparcel_visited', '1'); } catch (e) {}
+            try { localStorage.setItem('iparcel_visited', '1'); } catch (e) { }
             document.getElementById('first-visit-banner').classList.add('hidden');
         }
 
