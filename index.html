@@ -446,6 +446,40 @@
             animation: fadeIn 0.3s ease;
         }
 
+        .heatmap-viz-legend {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-top: 12px;
+            padding: 12px;
+            background: var(--border-light);
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border);
+        }
+
+        .h-legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.72rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+
+        .h-swatch {
+            width: 12px;
+            height: 12px;
+            border-radius: 3px;
+            flex-shrink: 0;
+            box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Adaptation spécifique pour le mode sombre */
+        body.dark-mode .heatmap-viz-legend {
+            background: #1e293b;
+            border-color: #334155;
+        }
+
         @keyframes fadeIn {
             from {
                 opacity: 0;
@@ -845,27 +879,50 @@
             color: var(--text-muted);
         }
 
+        /* ── Nouveau style sobre pour les badges ── */
         .rotation-badge {
-            padding: 4px 10px;
-            border-radius: 20px;
-            font-size: 0.7rem;
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 0.75rem;
             font-weight: 700;
-            color: white;
+            color: #000 !important;
+            /* Texte noir forcé */
             display: inline-flex;
             align-items: center;
-            gap: 4px;
+            gap: 6px;
+            border: 1.5px solid transparent;
+            box-shadow: none;
+            /* On retire les ombres */
         }
 
+        /* Couleurs de fond pastelles et bordures subtiles */
         .rotation-badge.good {
-            background: linear-gradient(135deg, #10b981, #059669);
+            background-color: #dcfce7;
+            border-color: #86efac;
         }
 
         .rotation-badge.moderate {
-            background: linear-gradient(135deg, #f59e0b, #d97706);
+            background-color: #fef9c3;
+            border-color: #fde68a;
+        }
+
+        .rotation-badge.risky {
+            background-color: #ffedd5;
+            border-color: #fed7aa;
         }
 
         .rotation-badge.bad {
-            background: linear-gradient(135deg, #ef4444, #dc2626);
+            background-color: #fee2e2;
+            border-color: #fecaca;
+        }
+
+        /* On nettoie aussi la carte de score pour enlever le fond vert/rouge flashy */
+        .rotation-score-card,
+        .rotation-score-card.mono,
+        .rotation-score-card.moderate {
+            background: var(--bg-light) !important;
+            border: 1px solid var(--border) !important;
+            box-shadow: var(--shadow-sm);
         }
 
         .rotation-score-ring {
@@ -1624,7 +1681,7 @@
         }
 
         .dash-stat {
-            background: var(--bg-card);
+            background: var(--panel-bg);
             border: 1px solid var(--border-light);
             border-radius: var(--radius-sm);
             padding: 14px;
@@ -2018,11 +2075,39 @@
             z-index: 5;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
         }
+
+        #dev-popup {
+            z-index: 10000;
+            /* Doit être au-dessus du loader */
+            backdrop-filter: blur(8px);
+            transition: opacity 0.4s ease;
+        }
+
+        #dev-popup.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
     </style>
 </head>
 
 <body>
-
+    <div id="dev-popup" class="auth-overlay">
+        <div class="auth-card" style="text-align: center;">
+            <div style="font-size: 3rem; margin-bottom: 10px;">🚧</div>
+            <h2 style="margin-bottom: 10px;">Version Beta</h2>
+            <p style="color: var(--text-secondary); line-height: 1.5;">
+                Bienvenue sur <strong>iParcel</strong>. <br>
+                Cette application est actuellement en cours de développement.
+                Certaines <strong>fonctionnalités</strong> (Heatmap, Historique, Exploitation) sont en phase de test.
+                La seul région disponible pour le moment est la <strong>Bretagne</strong>, les données sur la France
+                entière seront
+                bientôt disponibles !
+            </p>
+            <button class="auth-btn" onclick="closeDevPopup()" style="margin-top: 20px;">
+                Accéder à l'application
+            </button>
+        </div>
+    </div>
     <!-- ── Écran de chargement ── -->
     <div id="loader">
         <div class="loader-grid">
@@ -2344,7 +2429,14 @@
                         autocomplete="off">
                     <div id="suggestions" class="suggestions"></div>
                 </div>
-
+                <label>🌍 Région d'étude</label>
+                <select id="region-select">
+                    <option value="ALL">🌟 TOUTES LES RÉGIONS</option>
+                    <option value="BRETAGNE">📍 Bretagne</option>
+                    <option value="NORMANDIE">🍎 Normandie</option>
+                    <option value="PAYS_DE_LA_LOIRE">🌊 Pays de la Loire</option>
+                    <option value="CENTRE_VAL_DE_LOIRE">🏰 Centre-Val de Loire</option>
+                </select>
                 <label>📅 Année de Campagne</label>
                 <select id="year-select">
                     <option value="2023">🌱 2023 — Campagne actuelle</option>
@@ -2451,6 +2543,18 @@
 
                 <div id="spatial-heatmap-container"
                     style="height: 300px; border-radius: var(--radius-sm); border: 1px solid var(--border); overflow: hidden; position: relative; background: #f8fafc;">
+                </div>
+                <div id="spatial-heatmap-legend" class="heatmap-viz-legend" style="grid-template-columns: 1fr;">
+                    <div class="h-legend-item"><span class="h-swatch" style="background: #065f46;"></span><span>Élite
+                            (Score 9-10) - Rotation longue & variée</span></div>
+                    <div class="h-legend-item"><span class="h-swatch" style="background: #10b981;"></span><span>Optimale
+                            (Score 7-8) - Bonne alternance de familles</span></div>
+                    <div class="h-legend-item"><span class="h-swatch" style="background: #f59e0b;"></span><span>Moyenne
+                            (Score 4-6) - Cycles courts (ex: Blé/Maïs)</span></div>
+                    <div class="h-legend-item"><span class="h-swatch" style="background: #ef4444;"></span><span>Pauvre
+                            (Score 2-3) - Retours fréquents</span></div>
+                    <div class="h-legend-item"><span class="h-swatch" style="background: #991b1b;"></span><span>Critique
+                            (Score 0-1) - Monoculture prolongée</span></div>
                 </div>
 
                 <div class="info-grid" style="margin-top: 15px; grid-template-columns: 1fr;">
@@ -2660,12 +2764,21 @@
                 addMeasurePoint(e.lngLat);
                 return;
             }
-            const year = document.getElementById('year-select').value;
-            const lyrId = `lyr-${year}`;
-            if (!map.getLayer(lyrId)) return;
 
-            const features = map.queryRenderedFeatures(e.point, { layers: [lyrId] });
+            const year = document.getElementById('year-select').value;
+
+            // On récupère TOUTES les couches de l'année sélectionnée qui commencent par "lyr-"
+            const activeLayers = map.getStyle().layers
+                .filter(l => l.id.startsWith('lyr-') && l.id.includes(`_${year}`) && !l.id.includes('outline'))
+                .map(l => l.id);
+
+            if (activeLayers.length === 0) return;
+
+            // On cherche la parcelle parmi toutes ces couches
+            const features = map.queryRenderedFeatures(e.point, { layers: activeLayers });
             if (!features.length) return;
+
+            // ... reste de ton code (feature, props, parcelId) ...
 
             const feature = features[0];
             const props = feature.properties;
@@ -2701,14 +2814,14 @@
             showDetails(e, parcelId, props);
         });
 
-        // Curseur survol
-        map.on('mouseenter', (e) => {
+        map.on('mousemove', (e) => {
             const year = document.getElementById('year-select').value;
-            const lyrId = `lyr-${year}`;
-            if (map.getLayer(lyrId)) map.getCanvas().style.cursor = 'pointer';
-        });
-        map.on('mouseleave', (e) => {
-            if (!measureMode) map.getCanvas().style.cursor = '';
+            const activeLayers = map.getStyle().layers
+                .filter(l => l.id.startsWith('lyr-') && l.id.includes(`_${year}`) && !l.id.includes('outline'))
+                .map(l => l.id);
+
+            const features = map.queryRenderedFeatures(e.point, { layers: activeLayers });
+            map.getCanvas().style.cursor = (features.length > 0) ? 'pointer' : (measureMode ? 'crosshair' : '');
         });
 
         // ── Toast ──
@@ -2937,8 +3050,6 @@
 
         }
 
-        renderLineageGlobalStats();
-
         // ── Legend ──
         function renderLegend() {
             const box = document.getElementById("legend-list");
@@ -2990,14 +3101,14 @@
 
         function applyFilter() {
             const year = document.getElementById('year-select').value;
-            const lyr = `lyr-${year}`;
-            if (!map.getLayer(lyr)) return;
-            if (activeFilters.size === 0) {
-                map.setFilter(lyr, null);
-            } else {
-                // FIX: expression MapLibre correcte pour filtrer par valeurs multiples
-                map.setFilter(lyr, ['in', ['get', 'CODE_GROUP'], ['literal', [...activeFilters]]]);
-            }
+            const filter = activeFilters.size === 0 ? null : ['in', ['get', 'CODE_GROUP'], ['literal', [...activeFilters]]];
+
+            // On applique le filtre sur TOUTES les couches de l'année en cours
+            map.getStyle().layers.forEach(lyr => {
+                if (lyr.id.startsWith('lyr-') && lyr.id.includes(`_${year}`)) {
+                    map.setFilter(lyr.id, filter);
+                }
+            });
         }
 
         // ── Map Colors ──
@@ -3019,17 +3130,24 @@
             });
         }
 
-        function ensureLayer(year) {
+        function ensureLayer(year, specificRegion = null) {
             if (!mapReady) return;
-            const srcId = `src-${year}`;
-            const lyrId = `lyr-${year}`;
+
+            // Si on passe une région (mode ALL), on l'utilise. 
+            // Sinon, on prend la valeur actuelle du sélecteur.
+            const region = specificRegion || document.getElementById('region-select').value;
+
+            // Sécurité : ne rien faire si on est sur "ALL" sans région spécifiée
+            if (region === "ALL" && !specificRegion) return;
+
+            const fileName = `${region}_${year}`; // Ex: NORMANDIE_2023
+            const srcId = `src-${fileName}`;
+            const lyrId = `lyr-${fileName}`;
+
             if (!map.getSource(srcId)) {
-                // PMTiles : le fichier doit être placé dans /data/{year}.pmtiles
-                // Le protocole pmtiles:// est géré par la librairie pmtiles.js
                 map.addSource(srcId, {
                     type: "vector",
-                    // Ligne ~810 dans la fonction ensureLayer
-                    url: `pmtiles://https://huggingface.co/datasets/Juckles19/iparcel-public/resolve/main/${year}.pmtiles`
+                    url: `pmtiles://https://huggingface.co/datasets/Juckles19/iparcel-public/resolve/main/${fileName}.pmtiles`
                 });
             }
             if (!map.getLayer(lyrId)) {
@@ -3037,8 +3155,7 @@
                     id: lyrId, type: "fill", source: srcId, "source-layer": "parcelles",
                     paint: {
                         "fill-color": getMapColorExpression(),
-                        "fill-opacity": year === document.getElementById('year-select').value
-                            ? document.getElementById('opacity-slider').value / 100 : 0,
+                        "fill-opacity": (year === document.getElementById('year-select').value) ? (document.getElementById('opacity-slider').value / 100) : 0,
                         "fill-outline-color": "rgba(255,255,255,0.6)"
                     }
                 });
@@ -3110,17 +3227,21 @@
         function updateStats() {
             if (!mapReady) return;
             const year = document.getElementById('year-select').value;
-            const lyrId = `lyr-${year}`;
             document.getElementById('stat-zoom').textContent = map.getZoom().toFixed(1);
 
-            if (!map.getLayer(lyrId)) {
+            // Trouver tous les layers fill visibles pour l'année sélectionnée
+            const visibleLayers = map.getStyle().layers
+                .filter(lyr => lyr.id.startsWith('lyr-') && lyr.id.includes(`_${year}`) && lyr.type === 'fill')
+                .map(lyr => lyr.id);
+
+            if (visibleLayers.length === 0) {
                 document.getElementById('stat-parcels').textContent = '—';
                 document.getElementById('stat-surface').textContent = '—';
                 document.getElementById('stat-cultures').textContent = '—';
                 return;
             }
 
-            const features = map.queryRenderedFeatures({ layers: [lyrId] });
+            const features = map.queryRenderedFeatures({ layers: visibleLayers });
             document.getElementById('stat-parcels').textContent = features.length.toLocaleString('fr-FR');
 
             const surface = features.reduce((sum, f) => sum + parseFloat(f.properties.SURF_PARC || 0), 0);
@@ -3276,9 +3397,16 @@
                 const val = this.value;
                 document.getElementById('opacity-value').textContent = val;
                 if (!mapReady) return;
+
                 const year = document.getElementById('year-select').value;
-                const lyr = `lyr-${year}`;
-                if (map.getLayer(lyr)) map.setPaintProperty(lyr, 'fill-opacity', val / 100);
+                const op = val / 100;
+
+                // On applique l'opacité à TOUTES les régions de l'année sélectionnée
+                map.getStyle().layers.forEach(lyr => {
+                    if (lyr.id.startsWith('lyr-') && lyr.id.includes(`_${year}`) && lyr.type === 'fill') {
+                        map.setPaintProperty(lyr.id, 'fill-opacity', op);
+                    }
+                });
             });
 
             // FIX: event listener pour le slider de contour
@@ -3286,9 +3414,15 @@
                 const val = parseFloat(this.value);
                 document.getElementById('outline-value').textContent = val;
                 if (!mapReady) return;
+
                 const year = document.getElementById('year-select').value;
-                const lyrOutline = `lyr-${year}-outline`;
-                if (map.getLayer(lyrOutline)) map.setPaintProperty(lyrOutline, 'line-width', val);
+
+                // On applique l'épaisseur à TOUTES les couches "line" de l'année sélectionnée
+                map.getStyle().layers.forEach(lyr => {
+                    if (lyr.id.startsWith('lyr-') && lyr.id.includes(`_${year}`) && lyr.type === 'line') {
+                        map.setPaintProperty(lyr.id, 'line-width', val);
+                    }
+                });
             });
 
             // FIX: event listener pour le changement d'année
@@ -3298,10 +3432,15 @@
                 const op = document.getElementById('opacity-slider').value / 100;
                 ensureLayer(year);
                 // Masquer toutes les couches sauf l'année sélectionnée
-                years.forEach(y => {
-                    const lyr = `lyr-${y}`;
-                    if (map.getLayer(lyr)) {
-                        map.setPaintProperty(lyr, 'fill-opacity', y === year ? op : 0);
+                // Les layers sont nommées lyr-{REGION}_{year}, pas lyr-{year}
+                map.getStyle().layers.forEach(lyr => {
+                    if (lyr.id.startsWith('lyr-') && lyr.id !== 'highlight-fill') {
+                        const isSelected = lyr.id.includes(`_${year}`);
+                        if (lyr.type === 'fill') {
+                            map.setPaintProperty(lyr.id, 'fill-opacity', isSelected ? op : 0);
+                        } else if (lyr.type === 'line' && lyr.id.endsWith('-outline')) {
+                            map.setPaintProperty(lyr.id, 'line-opacity', isSelected ? 1 : 0);
+                        }
                     }
                 });
                 applyFilter();
@@ -3309,7 +3448,41 @@
                 showToast(`Année ${year} chargée`, "📅");
             });
         });
+        // À ajouter vers la ligne 1050
+        document.getElementById('region-select').addEventListener('change', function () {
+            const year = document.getElementById('year-select').value;
+            const region = this.value;
+            const op = document.getElementById('opacity-slider').value / 100;
 
+            // Liste de TOUTES les régions disponibles sur ton Hugging Face
+            const allRegions = ["BRETAGNE", "NORMANDIE", "PAYS_DE_LA_LOIRE", "CENTRE_VAL_DE_LOIRE"];
+
+            if (region === "ALL") {
+                // 1. On lance le chargement de chaque région pour l'année choisie
+                allRegions.forEach(r => ensureLayer(year, r));
+
+                // 2. On rend visible toutes les couches de cette année
+                map.getStyle().layers.forEach(lyr => {
+                    if (lyr.id.startsWith('lyr-')) {
+                        const isCorrectYear = lyr.id.includes(`_${year}`);
+                        map.setPaintProperty(lyr.id, lyr.type === 'fill' ? 'fill-opacity' : 'line-opacity', isCorrectYear ? (lyr.type === 'fill' ? op : 1) : 0);
+                    }
+                });
+                showToast("Affichage de toutes les régions", "🌟");
+            } else {
+                // Mode région unique classique
+                ensureLayer(year, region);
+                const activeLyrId = `lyr-${region}_${year}`;
+                map.getStyle().layers.forEach(lyr => {
+                    if (lyr.id.startsWith('lyr-')) {
+                        const isTarget = lyr.id.startsWith(activeLyrId);
+                        map.setPaintProperty(lyr.id, lyr.type === 'fill' ? 'fill-opacity' : 'line-opacity', isTarget ? (lyr.type === 'fill' ? op : 1) : 0);
+                    }
+                });
+                showToast(`Région ${region} activée`, "🌍");
+            }
+            updateStats();
+        });
         function flyToResult(lng, lat, label) {
             map.flyTo({ center: [lng, lat], zoom: 13 });
             document.getElementById('address-input').value = label;
@@ -3343,20 +3516,33 @@
             } catch (e) { return null; }
         }
 
-        // ── Bucket loader with cache ──
+        // ── Bucket loader with cache (region-aware) ──
         async function loadBucket(bucketId) {
-            if (bucketCache[bucketId]) return bucketCache[bucketId];
-            const url = `https://huggingface.co/datasets/Juckles19/iparcel-public/resolve/main/${bucketId}.json`;
-            try {
-                const response = await fetch(url);
-                if (!response.ok) return null;
-                const data = await response.json();
-                bucketCache[bucketId] = data;
-                return data;
-            } catch (e) {
-                console.warn(`[iParcel] Bucket lineage/${bucketId} introuvable`);
-                return null;
+            const region = document.getElementById('region-select').value;
+            // Pour "ALL", on utilise la première région comme fallback
+            const effectiveRegion = region === "ALL" ? "BRETAGNE" : region;
+            const cacheKey = `${effectiveRegion}_${bucketId}`;
+
+            if (bucketCache[cacheKey]) return bucketCache[cacheKey];
+
+            // Essayer d'abord le format régionalisé, puis le format legacy
+            const urls = [
+                `https://huggingface.co/datasets/Juckles19/iparcel-public/resolve/main/${effectiveRegion}_${bucketId}.json`,
+                `https://huggingface.co/datasets/Juckles19/iparcel-public/resolve/main/${bucketId}.json`,
+            ];
+
+            for (const url of urls) {
+                try {
+                    const response = await fetch(url);
+                    if (!response.ok) continue;
+                    const data = await response.json();
+                    bucketCache[cacheKey] = data;
+                    return data;
+                } catch (e) { continue; }
             }
+
+            console.warn(`[iParcel] Bucket ${effectiveRegion}/${bucketId} introuvable`);
+            return null;
         }
 
         // ── Parcel Details — single fetch, pre-calculated lineage ──
@@ -3705,7 +3891,7 @@
             <div class="parent-card" style="margin-bottom:6px;cursor:pointer;" 
                  title="Parcelle sœur issue du même parent ${s.parentId} en ${s.year}">
                 <div class="parent-card-header">
-                    <div class="culture-dot" style="background:${getCultureColor('')}"></div>
+                    <div class="culture-dot" style="background:${getCultureColorByCulture(s.culture)}"></div>
                     <div style="font-weight:600;color:var(--text-main);font-size:0.82rem;">${cropName}</div>
                     <div style="margin-left:auto;font-size:0.68rem;color:var(--text-muted);">
                         🆔 ${s.id}
@@ -3742,21 +3928,44 @@
 
         function computeRotationScore(cultures) {
             const valid = cultures.filter(c => c && c !== '—' && c !== '');
-            if (valid.length <= 1) return { score: 0, label: 'Données insuffisantes', level: 'moderate' };
-            const unique = new Set(valid);
-            const ratio = unique.size / valid.length;
-            const score = Math.round(ratio * 10);
+            if (valid.length < 3) return { score: 0, label: 'Données insuffisantes', level: 'moderate' };
+
+            const families = {
+                '1': 'Céréale', '2': 'Céréale', '3': 'Fourrage', '4': 'Oléagineux',
+                '5': 'Céréale', '6': 'Céréale', '9': 'Protéagineux', '11': 'Fourrage'
+            };
+
+            let penalties = 0;
+            let botanicalGroups = new Set();
+            let consecutiveCount = 0;
+            let lastCulture = null;
+
+            valid.forEach((c) => {
+                botanicalGroups.add(families[c] || 'Autre');
+
+                if (c === lastCulture) consecutiveCount++;
+                else consecutiveCount = 0;
+
+                // Pénalités divisées par 2 (plus indulgent)
+                if (consecutiveCount === 1) penalties += 1;
+                if (consecutiveCount > 1) penalties += 2;
+
+                lastCulture = c;
+            });
+
+            // Multiplicateur augmenté pour valoriser la diversité même faible
+            let rawScore = (botanicalGroups.size / valid.length) * 15;
+            let finalScore = Math.max(0, Math.min(10, Math.round(rawScore - penalties)));
+
             let label, level;
-            if (unique.size === 1) {
-                label = 'Monoculture'; level = 'bad';
-            } else if (ratio < 0.4) {
-                label = 'Rotation faible'; level = 'moderate';
-            } else if (ratio < 0.7) {
-                label = 'Rotation correcte'; level = 'moderate';
-            } else {
-                label = 'Rotation diversifiée'; level = 'good';
-            }
-            return { score, label, level, unique: unique.size, total: valid.length };
+            // Seuils abaissés pour être plus encourageant
+            if (finalScore >= 7) { label = 'Régénérative'; level = 'good'; }
+            else if (finalScore >= 5) { label = 'Diversifiée'; level = 'good'; }
+            else if (finalScore >= 3) { label = 'Conventionnelle'; level = 'moderate'; }
+            else if (finalScore >= 1) { label = 'Risquée (Cycles courts)'; level = 'risky'; }
+            else { label = 'Monoculture critique'; level = 'bad'; }
+
+            return { score: finalScore, label, level, unique: botanicalGroups.size, total: valid.length };
         }
         let spatialHeatmapMap = null;
 
@@ -3921,8 +4130,15 @@
             const selfCodes = Object.values(lineage).map(l => l.c).filter(c => c && c !== '?');
             const selfRatio = new Set(selfCodes).size / (selfCodes.length || 1);
             const selfId = parcelId.includes('_') ? parcelId.split('_')[1] : parcelId;
-            scores[selfId] = selfRatio > 0.7 ? "#10b981" : selfRatio > 0.4 ? "#f59e0b" : "#ef4444";
+            // Dans renderSpatialHeatmap
+            const selfScoreData = computeRotationScore(selfCodes);
+            const s = selfScoreData.score;
 
+            // Échelle de couleurs plus pertinente
+            scores[selfId] = s >= 7 ? "#10b981" : // Vert (Bon)
+                s >= 4 ? "#f59e0b" : // Orange (Moyen)
+                    s >= 2 ? "#fbbf24" : // Jaune (Risqué - correspond au badge)
+                        "#ef4444";           // Rouge (Mauvais)
             // Score for siblings (from pre-calculated sib data)
             for (const [yr, sibs] of Object.entries(siblings)) {
                 for (const sib of sibs) {
@@ -3943,10 +4159,12 @@
             });
 
             spatialHeatmapMap.on('load', () => {
+                const region = document.getElementById('region-select').value;
                 const year = document.getElementById('year-select').value;
+                const yearNum = parseInt(year);
                 spatialHeatmapMap.addSource('heatmap-src', {
                     type: 'vector',
-                    url: `pmtiles://https://huggingface.co/datasets/Juckles19/iparcel-public/resolve/main/${year}.pmtiles`
+                    url: `pmtiles://https://huggingface.co/datasets/Juckles19/iparcel-public/resolve/main/${region}_${year}.pmtiles`
                 });
 
                 const colorExpression = ["match", ["get", "ID_PARCEL"]];
@@ -3958,6 +4176,38 @@
                 spatialHeatmapMap.addLayer({
                     id: 'heatmap-layer-fill', type: 'fill', source: 'heatmap-src', 'source-layer': 'parcelles',
                     paint: { 'fill-color': colorExpression, 'fill-opacity': 0.8 }
+                });
+
+                // Contours des parcelles de l'année courante (blanc fin)
+                spatialHeatmapMap.addLayer({
+                    id: 'heatmap-layer-outline', type: 'line', source: 'heatmap-src', 'source-layer': 'parcelles',
+                    paint: { 'line-color': 'rgba(0,0,0,0.15)', 'line-width': 0.5 }
+                });
+
+                // Ajouter les contours noirs des parcelles des années précédentes
+                // pour voir l'évolution du découpage parcellaire
+                const lineageYears = Object.keys(lineage).map(Number).sort();
+                lineageYears.forEach(ly => {
+                    if (ly >= yearNum) return;
+                    const srcId = `heatmap-prev-${ly}`;
+                    const lyrId = `heatmap-outline-${ly}`;
+                    const prevRegion = region === "ALL" ? "BRETAGNE" : region;
+                    spatialHeatmapMap.addSource(srcId, {
+                        type: 'vector',
+                        url: `pmtiles://https://huggingface.co/datasets/Juckles19/iparcel-public/resolve/main/${prevRegion}_${ly}.pmtiles`
+                    });
+                    // Opacité décroissante pour les années plus anciennes
+                    const age = yearNum - ly;
+                    const opacity = Math.max(0.15, 0.7 - age * 0.08);
+                    spatialHeatmapMap.addLayer({
+                        id: lyrId, type: 'line', source: srcId, 'source-layer': 'parcelles',
+                        paint: {
+                            'line-color': '#000000',
+                            'line-width': age <= 1 ? 1.2 : 0.8,
+                            'line-opacity': opacity,
+                            'line-dasharray': age <= 1 ? [1] : [2, 2]
+                        }
+                    });
                 });
 
                 const hasSiblings = Object.keys(siblings).length > 0;
@@ -4097,9 +4347,10 @@
             miniMap.on('load', () => {
                 miniMapReady = true;
                 allYears.forEach(y => {
+                    const region = document.getElementById('region-select').value;
                     miniMap.addSource(`mini-src-${y}`, {
                         type: 'vector',
-                        url: `pmtiles://https://huggingface.co/datasets/Juckles19/iparcel-public/resolve/main/${y}.pmtiles`
+                        url: `pmtiles://https://huggingface.co/datasets/Juckles19/iparcel-public/resolve/main/${region}_${y}.pmtiles`
                     });
                     miniMap.addLayer({
                         id: `mini-fill-${y}`, type: 'fill', source: `mini-src-${y}`, 'source-layer': 'parcelles',
@@ -4428,7 +4679,7 @@
 
         async function loadExploitationParcelles() {
             if (!currentExploitation) return;
-            const { data } = await supabase
+            const { data } = await sb
                 .from('exploitation_parcelles')
                 .select('*')
                 .eq('exploitation_id', currentExploitation.id)
@@ -4776,6 +5027,12 @@
         // Init auth on page load
         initAuth();
         updateAuthUI();
+        function closeDevPopup() {
+            const popup = document.getElementById('dev-popup');
+            popup.classList.add('hidden');
+            // On peut aussi déclencher le masquage du loader ici si on veut 
+            // que l'utilisateur voit le popup pendant le chargement
+        }
 
     </script>
 </body>
