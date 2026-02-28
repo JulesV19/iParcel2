@@ -290,6 +290,173 @@
             border-color: #334155;
         }
 
+        /* ─────────────────────────────────────────────
+   🌳 GENEALOGY TREE
+───────────────────────────────────────────── */
+        .tree-viewport { padding: 4px 0 14px; }
+
+        /* Rangée par année */
+        .gtree-row {
+            position: relative;
+            display: flex;
+            align-items: stretch;
+            gap: 0;
+            min-height: 56px;
+        }
+        /* Badge année à gauche */
+        .gtree-year {
+            width: 44px;
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding-top: 14px;
+            position: relative;
+        }
+        .gtree-year-label {
+            font-size: 0.68rem;
+            font-weight: 800;
+            color: var(--text-muted);
+            z-index: 1;
+            background: var(--panel-bg, white);
+            padding: 2px 0;
+        }
+        /* Ligne verticale à travers les années */
+        .gtree-year::after {
+            content: “”;
+            position: absolute;
+            top: 0; bottom: 0; left: 50%;
+            width: 2px;
+            background: var(--border);
+            transform: translateX(-50%);
+            z-index: 0;
+        }
+        .gtree-row:first-child .gtree-year::after { top: 14px; }
+        .gtree-row:last-child .gtree-year::after { bottom: 50%; }
+
+        /* Zone des noeuds */
+        .gtree-nodes {
+            flex: 1;
+            display: flex;
+            gap: 6px;
+            padding: 6px 4px;
+            position: relative;
+            flex-wrap: wrap;
+        }
+
+        /* Noeud (une parcelle) */
+        .gtree-node {
+            flex: 1 1 0;
+            min-width: 80px;
+            max-width: 220px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: white;
+            overflow: hidden;
+            cursor: pointer;
+            transition: var(--transition);
+            position: relative;
+        }
+        .gtree-node:hover {
+            box-shadow: var(--shadow-md);
+            transform: translateY(-1px);
+            border-color: rgba(16,185,129,0.4);
+        }
+        .gtree-node.is-current {
+            border: 2px solid var(--accent);
+            box-shadow: 0 0 0 3px rgba(16,185,129,0.15);
+        }
+        .gtree-node.is-main {
+            border-left: 5px solid var(--accent);
+        }
+        .gtree-node.is-sibling {
+            border-left: 4px solid #94a3b8;
+            opacity: 0.85;
+        }
+
+        /* Accent couleur groupe */
+        .gtree-accent {
+            height: 4px;
+            width: 100%;
+        }
+
+        /* Contenu du noeud */
+        .gtree-body {
+            padding: 7px 9px 8px;
+        }
+        .gtree-crop {
+            font-size: 0.78rem;
+            font-weight: 800;
+            color: var(--text-main);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .gtree-id {
+            font-size: 0.62rem;
+            color: var(--text-muted);
+            margin-top: 2px;
+            font-variant-numeric: tabular-nums;
+        }
+        .gtree-pct {
+            font-size: 0.60rem;
+            font-weight: 700;
+            color: var(--text-secondary);
+            margin-top: 3px;
+        }
+        .gtree-badge {
+            display: inline-block;
+            font-size: 0.58rem;
+            font-weight: 800;
+            letter-spacing: 0.3px;
+            text-transform: uppercase;
+            padding: 1px 6px;
+            border-radius: 4px;
+            margin-top: 4px;
+        }
+
+        /* Connecteurs (lignes entre rangées) */
+        .gtree-connectors {
+            position: relative;
+            height: 16px;
+            margin-left: 44px;
+        }
+        .gtree-connectors svg {
+            width: 100%;
+            height: 100%;
+            overflow: visible;
+        }
+
+        /* Tag de lien entre rangées */
+        .gtree-link-tag {
+            position: absolute;
+            left: 50%;
+            top: -2px;
+            transform: translateX(-50%);
+            font-size: 0.55rem;
+            font-weight: 800;
+            color: var(--text-muted);
+            background: var(--panel-bg, white);
+            padding: 0 4px;
+            white-space: nowrap;
+        }
+
+        /* Dark mode */
+        body.dark-mode .gtree-node {
+            background: #0f172a;
+            border-color: #334155;
+        }
+        body.dark-mode .gtree-node.is-current {
+            border-color: var(--accent);
+        }
+        body.dark-mode .gtree-year-label,
+        body.dark-mode .gtree-link-tag {
+            background: var(--panel-bg, #0f172a);
+        }
+        body.dark-mode .gtree-year::after {
+            background: #334155;
+        }
+
         body.dark-mode .parcel-list-item:hover {
             background: #334155;
         }
@@ -2095,14 +2262,25 @@
         <div class="auth-card" style="text-align: center;">
             <div style="font-size: 3rem; margin-bottom: 10px;">🚧</div>
             <h2 style="margin-bottom: 10px;">Version Beta</h2>
-            <p style="color: var(--text-secondary); line-height: 1.5;">
+            <p style="color: var(--text-secondary); line-height: 1.5; font-size: 0.85rem;">
                 Bienvenue sur <strong>iParcel</strong>. <br>
                 Cette application est actuellement en cours de développement.
                 Certaines <strong>fonctionnalités</strong> (Heatmap, Historique, Exploitation) sont en phase de test.
-                La seul région disponible pour le moment est la <strong>Bretagne</strong>, les données sur la France
-                entière seront
-                bientôt disponibles !
+                La seule région disponible pour le moment est la <strong>Bretagne</strong>, les données sur la France
+                entière seront bientôt disponibles !
             </p>
+
+            <div style="text-align: left; margin-top: 20px;">
+                <label>📍 Sélectionnez votre région d'étude</label>
+                <select id="popup-region-select" style="padding-left: 14px; margin-top: 5px;">
+                    <option value="BRETAGNE">📍 Bretagne</option>
+                    <option value="NORMANDIE">🍎 Normandie</option>
+                    <option value="PAYS_DE_LA_LOIRE">🌊 Pays de la Loire</option>
+                    <option value="CENTRE-VAL_DE_LOIRE">🏰 Centre-Val de Loire</option>
+                    <option value="ILE_DE_FRANCE">🗼 Île-de-France</option>
+                </select>
+            </div>
+
             <button class="auth-btn" onclick="closeDevPopup()" style="margin-top: 20px;">
                 Accéder à l'application
             </button>
@@ -2435,7 +2613,8 @@
                     <option value="BRETAGNE">📍 Bretagne</option>
                     <option value="NORMANDIE">🍎 Normandie</option>
                     <option value="PAYS_DE_LA_LOIRE">🌊 Pays de la Loire</option>
-                    <option value="CENTRE_VAL_DE_LOIRE">🏰 Centre-Val de Loire</option>
+                    <option value="CENTRE-VAL_DE_LOIRE">🏰 Centre-Val de Loire</option>
+                    <option value="ILE_DE_FRANCE">🗼 Île-de-France</option>
                 </select>
                 <label>📅 Année de Campagne</label>
                 <select id="year-select">
@@ -2523,8 +2702,8 @@
                 <button class="side-tab active" onclick="switchSideTab(this, 'stab-info')">ℹ️ Infos</button>
                 <button class="side-tab" onclick="switchSideTab(this, 'stab-history')">📜 Historique</button>
                 <button class="side-tab" onclick="switchSideTab(this, 'stab-parcelle')">🗺️ Parcelle</button>
-                <button class="side-tab" onclick="switchSideTab(this, 'stab-notes')">📝 Notes</button>
                 <button class="side-tab" onclick="switchSideTab(this, 'stab-heatmap')">📊 Heatmap</button>
+                <button class="side-tab" onclick="switchSideTab(this, 'stab-tree')">🌳 Arbre</button>
             </div>
 
             <div class="side-tab-content active" id="stab-info">
@@ -2597,12 +2776,15 @@
                 <div id="parcel-viz-info" style="margin-top:8px;font-size:0.78rem;color:var(--text-secondary);"></div>
             </div>
 
-            <div class="side-tab-content" id="stab-notes">
-                <label>📝 Notes sur cette parcelle</label>
-                <textarea class="note-input" id="parcel-note" placeholder="Ajouter des observations..."></textarea>
-                <button class="export-btn" onclick="saveNote()" style="margin-top:10px;">💾 Sauvegarder la note</button>
-                <label style="margin-top:20px;">📋 Notes précédentes</label>
-                <div id="saved-notes" style="font-size:0.85rem; color:var(--text-muted);">Aucune note.</div>
+            <button class="side-tab" onclick="switchSideTab(this, 'stab-tree')">🌳 Arbre</button>
+
+            <div class="side-tab-content" id="stab-tree">
+                <label>🌳 Généalogie de la parcelle</label>
+                <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 15px;">
+                    Visualisation des fusions et divisions successives.
+                </p>
+                <div id="genealogy-tree-container" class="tree-viewport">
+                </div>
             </div>
 
             <button class="export-btn" onclick="exportParcelPDF()" style="margin-top:20px;">
@@ -2810,8 +2992,12 @@
                 return;
             }
 
+            // Extraire la région depuis le layer ID (ex: "lyr-NORMANDIE_2023" → "NORMANDIE")
+            const layerId = feature.layer && feature.layer.id || '';
+            const featureRegion = layerId.startsWith('lyr-') ? layerId.slice(4).replace(/_\d{4}$/, '') : null;
+
             highlightFeature(feature);
-            showDetails(e, parcelId, props);
+            showDetails(e, parcelId, props, featureRegion);
         });
 
         map.on('mousemove', (e) => {
@@ -3455,7 +3641,7 @@
             const op = document.getElementById('opacity-slider').value / 100;
 
             // Liste de TOUTES les régions disponibles sur ton Hugging Face
-            const allRegions = ["BRETAGNE", "NORMANDIE", "PAYS_DE_LA_LOIRE", "CENTRE_VAL_DE_LOIRE"];
+            const allRegions = ["BRETAGNE", "NORMANDIE", "PAYS_DE_LA_LOIRE", "CENTRE-VAL_DE_LOIRE", "ILE_DE_FRANCE"];
 
             if (region === "ALL") {
                 // 1. On lance le chargement de chaque région pour l'année choisie
@@ -3517,36 +3703,32 @@
         }
 
         // ── Bucket loader with cache (region-aware) ──
-        async function loadBucket(bucketId) {
-            const region = document.getElementById('region-select').value;
-            // Pour "ALL", on utilise la première région comme fallback
-            const effectiveRegion = region === "ALL" ? "BRETAGNE" : region;
+        async function loadBucket(bucketId, explicitRegion) {
+            const effectiveRegion = explicitRegion || document.getElementById('region-select').value;
+            if (effectiveRegion === "ALL") {
+                console.warn('[iParcel] loadBucket appelé sans région explicite en mode ALL');
+                return null;
+            }
             const cacheKey = `${effectiveRegion}_${bucketId}`;
 
             if (bucketCache[cacheKey]) return bucketCache[cacheKey];
 
-            // Essayer d'abord le format régionalisé, puis le format legacy
-            const urls = [
-                `https://huggingface.co/datasets/Juckles19/iparcel-public/resolve/main/${effectiveRegion}_${bucketId}.json`,
-                `https://huggingface.co/datasets/Juckles19/iparcel-public/resolve/main/${bucketId}.json`,
-            ];
-
-            for (const url of urls) {
-                try {
-                    const response = await fetch(url);
-                    if (!response.ok) continue;
+            const url = `https://huggingface.co/datasets/Juckles19/iparcel-public/resolve/main/${effectiveRegion}_${bucketId}.json`;
+            try {
+                const response = await fetch(url);
+                if (response.ok) {
                     const data = await response.json();
                     bucketCache[cacheKey] = data;
                     return data;
-                } catch (e) { continue; }
-            }
+                }
+            } catch (e) { /* fetch failed */ }
 
             console.warn(`[iParcel] Bucket ${effectiveRegion}/${bucketId} introuvable`);
             return null;
         }
 
         // ── Parcel Details — single fetch, pre-calculated lineage ──
-        async function showDetails(e, parcelId, props) {
+        async function showDetails(e, parcelId, props, parcelRegion) {
             const year = document.getElementById('year-select').value;
             const compositeId = `${year}_${parcelId}`;
             currentParcelId = parcelId;
@@ -3559,7 +3741,7 @@
             try {
                 // Bucket = 2 derniers chiffres du compositeId (= de parcelId)
                 const bucket = compositeId.slice(-2);
-                const data = await loadBucket(bucket);
+                const data = await loadBucket(bucket, parcelRegion);
 
                 const parcelInfo = data && data.parcelles ? data.parcelles[compositeId] : null;
 
@@ -3588,7 +3770,7 @@
                         if (!parentInfo) {
                             // Parent is in a different bucket
                             const parentBucket = parentUid.slice(-2);
-                            const parentData = await loadBucket(parentBucket);
+                            const parentData = await loadBucket(parentBucket, parcelRegion);
                             parentInfo = parentData && parentData.parcelles ? parentData.parcelles[parentUid] : null;
                             // Also check filiations in parent bucket for next iteration
                             if (parentData && parentData.filiations && parentData.filiations[parentUid]) {
@@ -3699,8 +3881,9 @@
                 renderHistoryWithRecord(parcelId, props, record);
 
                 if (highlightedFeature) {
-                    renderSpatialHeatmap(parcelId, highlightedFeature, record);
-                    initParcelViz(parcelId, highlightedFeature, props, record);
+                    renderSpatialHeatmap(parcelId, highlightedFeature, record, parcelRegion);
+                    initParcelViz(parcelId, highlightedFeature, props, record, parcelRegion);
+                    renderGenealogyTree(parcelId, parcelRegion);
                 }
 
             } catch (err) {
@@ -4112,7 +4295,41 @@
             list.innerHTML = html;
         }
 
-        async function renderSpatialHeatmap(parcelId, feature, record) {
+        function scoreToColor(s) {
+            if (s >= 7) return "#10b981";  // Vert — bon
+            if (s >= 4) return "#f59e0b";  // Orange — moyen
+            if (s >= 2) return "#fbbf24";  // Jaune — risqué
+            return "#ef4444";              // Rouge — mauvais
+        }
+
+        async function buildParentLineage(parentUid, parcelRegion, maxDepth = 6) {
+            // Remonte la chaîne de filiation d'un parent pour récupérer son historique de cultures
+            const cultures = [];
+            let uid = parentUid;
+            const visited = new Set();
+
+            for (let d = 0; d < maxDepth; d++) {
+                if (visited.has(uid)) break;
+                visited.add(uid);
+
+                const bucket = uid.slice(-2);
+                const bData = await loadBucket(bucket, parcelRegion);
+                if (!bData) break;
+
+                // Récupérer la culture de ce parent
+                const info = bData.parcelles ? bData.parcelles[uid] : null;
+                if (info && info.c && info.c !== '?') cultures.push(info.c);
+
+                // Remonter au meilleur parent
+                const fil = bData.filiations ? bData.filiations[uid] : null;
+                if (!fil || !fil.parents || fil.parents.length === 0) break;
+                const best = fil.parents.reduce((a, b) => b.pct > a.pct ? b : a);
+                uid = best.uid;
+            }
+            return cultures;
+        }
+
+        async function renderSpatialHeatmap(parcelId, feature, record, parcelRegion) {
             const container = document.getElementById('spatial-heatmap-container');
             if (spatialHeatmapMap) { spatialHeatmapMap.remove(); spatialHeatmapMap = null; }
 
@@ -4121,99 +4338,96 @@
                 return;
             }
 
-            // Use siblings from pre-calculated lineage to build color scores
             const lineage = record.lineage || {};
-            const siblings = record.sib || {};
-            const scores = {};
+            // S'assurer que la région est en MAJUSCULES pour Hugging Face
+            const region = (parcelRegion || document.getElementById('region-select').value).toUpperCase();
+            const year = document.getElementById('year-select').value;
+            const yearNum = parseInt(year);
+            const compositeId = `${year}_${parcelId}`;
 
-            // Score for the parcel itself
-            const selfCodes = Object.values(lineage).map(l => l.c).filter(c => c && c !== '?');
-            const selfRatio = new Set(selfCodes).size / (selfCodes.length || 1);
-            const selfId = parcelId.includes('_') ? parcelId.split('_')[1] : parcelId;
-            // Dans renderSpatialHeatmap
-            const selfScoreData = computeRotationScore(selfCodes);
-            const s = selfScoreData.score;
+            // 1. Charger les parents pour identifier les zones
+            const bucket = compositeId.slice(-2);
+            const data = await loadBucket(bucket, region);
+            const fil = data && data.filiations ? data.filiations[compositeId] : null;
+            const allParents = (fil && fil.parents) ? fil.parents : [];
 
-            // Échelle de couleurs plus pertinente
-            scores[selfId] = s >= 7 ? "#10b981" : // Vert (Bon)
-                s >= 4 ? "#f59e0b" : // Orange (Moyen)
-                    s >= 2 ? "#fbbf24" : // Jaune (Risqué - correspond au badge)
-                        "#ef4444";           // Rouge (Mauvais)
-            // Score for siblings (from pre-calculated sib data)
-            for (const [yr, sibs] of Object.entries(siblings)) {
-                for (const sib of sibs) {
-                    if (!scores[sib.id]) {
-                        // We don't have full lineage of siblings, use their culture diversity hint
-                        scores[sib.id] = "#94a3b8"; // Neutral gray for siblings
-                    }
-                }
+            const parentScores = {};
+            const scoreValues = [];
+
+            for (const parent of allParents) {
+                const parentIdParcel = parent.uid.split('_').slice(1).join('_');
+                const cultures = await buildParentLineage(parent.uid, region, 7);
+                const scoreData = computeRotationScore(cultures);
+                const color = scoreToColor(scoreData.score);
+                parentScores[parentIdParcel] = { color, score: scoreData.score };
+                scoreValues.push(scoreData.score);
             }
+
+            // Fallback si pas de parents (une seule zone)
+            if (Object.keys(parentScores).length === 0) {
+                const selfCodes = Object.values(lineage).map(l => l.c).filter(c => c && c !== '?');
+                const selfScore = computeRotationScore(selfCodes);
+                const cleanId = parcelId.includes('_') ? parcelId.split('_')[1] : parcelId;
+                parentScores[cleanId] = { color: scoreToColor(selfScore.score), score: selfScore.score };
+                scoreValues.push(selfScore.score);
+            }
+
+            const hasMultipleZones = Object.keys(parentScores).length > 1;
+            const fillYear = hasMultipleZones ? yearNum - 1 : yearNum;
 
             const bbox = getFeatureBboxFromGeom(feature.geometry);
             spatialHeatmapMap = new maplibregl.Map({
                 container: 'spatial-heatmap-container',
-                style: { version: 8, sources: {}, layers: [{ id: 'bg', type: 'background', paint: { 'background-color': '#f8fafc' } }] },
+                style: { version: 8, sources: {}, layers: [{ id: 'bg', type: 'background', paint: { 'background-color': '#f1f5f9' } }] },
                 bounds: [[bbox[0], bbox[1]], [bbox[2], bbox[3]]],
                 fitBoundsOptions: { padding: 20 },
                 interactive: false, attributionControl: false
             });
 
             spatialHeatmapMap.on('load', () => {
-                const region = document.getElementById('region-select').value;
-                const year = document.getElementById('year-select').value;
-                const yearNum = parseInt(year);
-                spatialHeatmapMap.addSource('heatmap-src', {
+                const fillSrcId = `heatmap-fill-src`;
+                spatialHeatmapMap.addSource(fillSrcId, {
                     type: 'vector',
-                    url: `pmtiles://https://huggingface.co/datasets/Juckles19/iparcel-public/resolve/main/${region}_${year}.pmtiles`
+                    url: `pmtiles://https://huggingface.co/datasets/Juckles19/iparcel-public/resolve/main/${region}_${fillYear}.pmtiles`
                 });
 
-                const colorExpression = ["match", ["get", "ID_PARCEL"]];
-                Object.entries(scores).forEach(([id, color]) => {
-                    colorExpression.push(id, color);
-                });
-                colorExpression.push("rgba(0,0,0,0.05)");
+                // REGLAGE ICI : On teste plusieurs noms de propriétés possibles (ID_PARCEL, id_parcel, etc.)
+                const idExpression = ["coalesce", ["get", "ID_PARCEL"], ["get", "id_parcel"], ["get", "ID"], ["get", "id"]];
+                const colorExpression = ["match", idExpression];
 
+                Object.entries(parentScores).forEach(([id, data]) => {
+                    colorExpression.push(id, data.color);
+                });
+
+                // Gris très clair au lieu de transparent pour le débogage
+                colorExpression.push("rgba(200,200,200,0.1)");
+
+                // Dans la fonction renderSpatialHeatmap, sous spatialHeatmapMap.on('load', ...)
                 spatialHeatmapMap.addLayer({
-                    id: 'heatmap-layer-fill', type: 'fill', source: 'heatmap-src', 'source-layer': 'parcelles',
-                    paint: { 'fill-color': colorExpression, 'fill-opacity': 0.8 }
+                    id: 'heatmap-layer-outline',
+                    type: 'line',
+                    source: fillSrcId,
+                    'source-layer': 'parcelles',
+                    paint: {
+                        'line-color': '#000000', // Change le gris transparent en noir pur
+                        'line-width': 1,          // Augmente légèrement l'épaisseur (était 0.5)
+                        'line-opacity': 0.4       // Ajoute une opacité pour ne pas masquer les couleurs
+                    }
                 });
 
-                // Contours des parcelles de l'année courante (blanc fin)
+                // Contour de la parcelle sélectionnée
+                spatialHeatmapMap.addSource('parcel-boundary', {
+                    type: 'geojson',
+                    data: { type: 'Feature', geometry: feature.geometry, properties: {} }
+                });
                 spatialHeatmapMap.addLayer({
-                    id: 'heatmap-layer-outline', type: 'line', source: 'heatmap-src', 'source-layer': 'parcelles',
-                    paint: { 'line-color': 'rgba(0,0,0,0.15)', 'line-width': 0.5 }
+                    id: 'parcel-boundary-line', type: 'line', source: 'parcel-boundary',
+                    paint: { 'line-color': '#000', 'line-width': 2 }
                 });
 
-                // Ajouter les contours noirs des parcelles des années précédentes
-                // pour voir l'évolution du découpage parcellaire
-                const lineageYears = Object.keys(lineage).map(Number).sort();
-                lineageYears.forEach(ly => {
-                    if (ly >= yearNum) return;
-                    const srcId = `heatmap-prev-${ly}`;
-                    const lyrId = `heatmap-outline-${ly}`;
-                    const prevRegion = region === "ALL" ? "BRETAGNE" : region;
-                    spatialHeatmapMap.addSource(srcId, {
-                        type: 'vector',
-                        url: `pmtiles://https://huggingface.co/datasets/Juckles19/iparcel-public/resolve/main/${prevRegion}_${ly}.pmtiles`
-                    });
-                    // Opacité décroissante pour les années plus anciennes
-                    const age = yearNum - ly;
-                    const opacity = Math.max(0.15, 0.7 - age * 0.08);
-                    spatialHeatmapMap.addLayer({
-                        id: lyrId, type: 'line', source: srcId, 'source-layer': 'parcelles',
-                        paint: {
-                            'line-color': '#000000',
-                            'line-width': age <= 1 ? 1.2 : 0.8,
-                            'line-opacity': opacity,
-                            'line-dasharray': age <= 1 ? [1] : [2, 2]
-                        }
-                    });
-                });
-
-                const hasSiblings = Object.keys(siblings).length > 0;
-                document.getElementById('heatmap-score-label').textContent = hasSiblings ? "Découpage détecté" : "Diversité des cultures";
-                document.getElementById('heatmap-score-value').textContent =
-                    `${new Set(selfCodes).size} cultures / ${selfCodes.length} ans`;
+                const avgScore = Math.round(scoreValues.reduce((a, b) => a + b, 0) / scoreValues.length);
+                document.getElementById('heatmap-score-value').textContent = `${avgScore}/10`;
+                document.getElementById('heatmap-score-label').textContent = hasMultipleZones ? `${scoreValues.length} zones détectées` : "Score de rotation";
             });
         }
 
@@ -4302,7 +4516,7 @@
             }
         }
 
-        function initParcelViz(parcelId, feature, props, record) {
+        function initParcelViz(parcelId, feature, props, record, parcelRegion) {
             destroyMiniMap();
 
             const lineage = record ? (record.lineage || {}) : {};
@@ -4346,8 +4560,8 @@
 
             miniMap.on('load', () => {
                 miniMapReady = true;
+                const region = parcelRegion || document.getElementById('region-select').value;
                 allYears.forEach(y => {
-                    const region = document.getElementById('region-select').value;
                     miniMap.addSource(`mini-src-${y}`, {
                         type: 'vector',
                         url: `pmtiles://https://huggingface.co/datasets/Juckles19/iparcel-public/resolve/main/${region}_${y}.pmtiles`
@@ -5029,11 +5243,180 @@
         updateAuthUI();
         function closeDevPopup() {
             const popup = document.getElementById('dev-popup');
-            popup.classList.add('hidden');
-            // On peut aussi déclencher le masquage du loader ici si on veut 
-            // que l'utilisateur voit le popup pendant le chargement
-        }
+            const popupSelect = document.getElementById('popup-region-select');
+            const mainSelect = document.getElementById('region-select');
 
+            if (popupSelect && mainSelect) {
+                mainSelect.value = popupSelect.value;
+                mainSelect.dispatchEvent(new Event('change'));
+            }
+            popup.classList.add('hidden');
+            setTimeout(() => popup.remove(), 400);
+        }
+        async function renderGenealogyTree(parcelId, parcelRegion) {
+            const container = document.getElementById('genealogy-tree-container');
+            const record = lineageData[parcelId];
+            const year = document.getElementById('year-select').value;
+            const yearNum = parseInt(year);
+
+            if (!record || !record.lineage) {
+                container.innerHTML = `<p style="color:var(--text-muted);font-size:0.8rem;">Pas de données de filiation.</p>`;
+                return;
+            }
+
+            const lineage = record.lineage || {};
+            const siblings = record.sib || {};
+            const sortedYears = Object.keys(lineage).sort((a, b) => a - b);
+
+            // ── Charger les données de filiation pour détecter les enfants (refusions) ──
+            const compositeId = `${year}_${parcelId}`;
+            const bucket = compositeId.slice(-2);
+            const data = await loadBucket(bucket, parcelRegion);
+            const fil = data && data.filiations ? data.filiations[compositeId] : null;
+            const children = (fil && fil.children) ? fil.children : [];
+
+            // Charger info sur les enfants pour savoir s'il y a eu refusion
+            const childrenInfo = [];
+            for (const child of children) {
+                const childIdParcel = child.uid.split('_').slice(1).join('_');
+                const childBucket = child.uid.slice(-2);
+                const childData = await loadBucket(childBucket, parcelRegion);
+                const childParcelle = childData && childData.parcelles ? childData.parcelles[child.uid] : null;
+                const childFil = childData && childData.filiations ? childData.filiations[child.uid] : null;
+                const childParentCount = (childFil && childFil.parents) ? childFil.parents.length : 0;
+                childrenInfo.push({
+                    uid: child.uid,
+                    id: childIdParcel,
+                    pct: child.pct,
+                    c: childParcelle ? childParcelle.c : '?',
+                    g: childParcelle ? childParcelle.g : '',
+                    isMerge: childParentCount > 1,
+                    parentCount: childParentCount,
+                });
+            }
+
+            // ── Construire le HTML de l'arbre ──
+            function nodeHtml(id, cultCode, group, opts = {}) {
+                const crop = cropLabels[cultCode] || cultCode || '?';
+                const color = cultureColors[group] || '#94a3b8';
+                const cls = [
+                    'gtree-node',
+                    opts.isCurrent ? 'is-current' : '',
+                    opts.isMain ? 'is-main' : '',
+                    opts.isSibling ? 'is-sibling' : '',
+                ].filter(Boolean).join(' ');
+                const clickAttr = opts.isCurrent ? '' : `onclick="loadParent('${opts.compositeUid || id}')"`;
+                return `
+                    <div class="${cls}" ${clickAttr} title="${crop} — ${id}">
+                        <div class="gtree-accent" style="background:${color};"></div>
+                        <div class="gtree-body">
+                            <div class="gtree-crop">${crop}</div>
+                            <div class="gtree-id">${id}</div>
+                            ${opts.pct !== undefined ? `<div class="gtree-pct">${Math.round(opts.pct * 100)}% recouvrement</div>` : ''}
+                            ${opts.badge ? `<div class="gtree-badge" style="background:${opts.badgeColor || '#e2e8f0'};color:${opts.badgeText || '#475569'};">${opts.badge}</div>` : ''}
+                        </div>
+                    </div>`;
+            }
+
+            let html = '';
+
+            // ── Rangées des parents (du plus ancien au plus récent) ──
+            for (let i = 0; i < sortedYears.length; i++) {
+                const yr = sortedYears[i];
+                const entry = lineage[yr];
+                const sibs = siblings[yr] || [];
+
+                // Connecteur entre rangées
+                if (i > 0) {
+                    const prevSibs = siblings[sortedYears[i - 1]] || [];
+                    const prevCount = 1 + prevSibs.length;
+                    if (prevCount > 1) {
+                        html += `<div class="gtree-connectors"><div class="gtree-link-tag">fusion</div></div>`;
+                    } else {
+                        html += `<div class="gtree-connectors"></div>`;
+                    }
+                }
+
+                html += `<div class="gtree-row">`;
+                html += `<div class="gtree-year"><span class="gtree-year-label">${yr}</span></div>`;
+                html += `<div class="gtree-nodes">`;
+
+                // Noeud principal (parent direct)
+                html += nodeHtml(entry.p, entry.c, entry.g, {
+                    isMain: true,
+                    pct: entry.cf,
+                    compositeUid: `${yr}_${entry.p}`,
+                });
+
+                // Noeuds soeurs
+                for (const sib of sibs) {
+                    html += nodeHtml(sib.id, sib.c, sib.g, {
+                        isSibling: true,
+                        pct: sib.cf,
+                        compositeUid: `${parseInt(yr) + 1}_${sib.id}`,
+                        badge: 'soeur',
+                        badgeColor: '#f1f5f9',
+                        badgeText: '#64748b',
+                    });
+                }
+
+                html += `</div></div>`;
+            }
+
+            // ── Connecteur vers la parcelle actuelle ──
+            const lastYearSibs = siblings[sortedYears[sortedYears.length - 1]] || [];
+            if (lastYearSibs.length > 0) {
+                html += `<div class="gtree-connectors"><div class="gtree-link-tag">fusion</div></div>`;
+            } else {
+                html += `<div class="gtree-connectors"></div>`;
+            }
+
+            // ── Parcelle actuelle ──
+            html += `<div class="gtree-row">`;
+            html += `<div class="gtree-year"><span class="gtree-year-label">${year}</span></div>`;
+            html += `<div class="gtree-nodes">`;
+            html += nodeHtml(parcelId, record.c || record.c23, record.g || record.g23, {
+                isCurrent: true,
+                badge: 'cible',
+                badgeColor: '#d1fae5',
+                badgeText: '#065f46',
+            });
+            html += `</div></div>`;
+
+            // ── Enfants (année suivante) — détection de refusions ──
+            if (childrenInfo.length > 0) {
+                const nextYear = yearNum + 1;
+                const hasMultiple = childrenInfo.length > 1;
+
+                if (hasMultiple) {
+                    html += `<div class="gtree-connectors"><div class="gtree-link-tag">division</div></div>`;
+                } else {
+                    html += `<div class="gtree-connectors"></div>`;
+                }
+
+                html += `<div class="gtree-row">`;
+                html += `<div class="gtree-year"><span class="gtree-year-label">${nextYear}</span></div>`;
+                html += `<div class="gtree-nodes">`;
+
+                for (const child of childrenInfo) {
+                    const badge = child.isMerge ? `fusion (${child.parentCount} origines)` : (hasMultiple ? 'fragment' : 'successeur');
+                    const badgeColor = child.isMerge ? '#fef3c7' : '#f1f5f9';
+                    const badgeText = child.isMerge ? '#92400e' : '#64748b';
+
+                    html += nodeHtml(child.id, child.c, child.g, {
+                        pct: child.pct,
+                        compositeUid: child.uid,
+                        badge,
+                        badgeColor,
+                        badgeText,
+                    });
+                }
+
+                html += `</div></div>`;
+            }
+
+            container.innerHTML = html;
+        }
     </script>
 </body>
 
