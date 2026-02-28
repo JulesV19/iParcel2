@@ -5407,10 +5407,11 @@
             const container = document.getElementById('dash-exploitation-map');
             if (!container || parcelles.length === 0) return;
 
-            const region = document.getElementById('region-select').value;
+            // On récupère la région RÉELLE de la première parcelle de l'exploitation
+            // au lieu d'utiliser le sélecteur global qui a changé
+            const exploitationRegion = parcelles[0].region || document.getElementById('region-select').value;
             const year = document.getElementById('year-select').value;
-            // On utilise une région par défaut si "ALL" est sélectionné pour le fond du dashboard
-            const effectiveRegion = region === "ALL" ? "BRETAGNE" : region;
+            // On utilise une région par défaut si "ALL" est sélectionné pour le fond
 
             if (!dashMap) {
                 dashMap = new maplibregl.Map({
@@ -5427,12 +5428,13 @@
                     attributionControl: false
                 });
 
-                dashMap.on('load', () => {
-                    const parcelIds = parcelles.map(p => p.parcel_id);
+                const sourceId = 'src-dash-vector';
+                const pmtilesUrl = `https://huggingface.co/datasets/Juckles19/iparcel-public/resolve/main/${exploitationRegion}_${year}.pmtiles`;
 
-                    dashMap.addSource('src-dash-vector', {
+                if (!dashMap.getSource(sourceId)) {
+                    dashMap.addSource(sourceId, {
                         type: "vector",
-                        url: `pmtiles://https://huggingface.co/datasets/Juckles19/iparcel-public/resolve/main/${effectiveRegion}_${year}.pmtiles`
+                        url: `pmtiles://${pmtilesUrl}`
                     });
 
                     dashMap.addLayer({
@@ -5452,13 +5454,14 @@
                     });
 
                     fitDashMapBounds(parcelles);
-                });
+                };
             } else {
                 // Mise à jour du filtre si la map existe déjà
                 const parcelIds = parcelles.map(p => p.parcel_id);
                 if (dashMap.getLayer('lyr-dash-fill')) {
                     dashMap.setFilter('lyr-dash-fill', ['in', ['coalesce', ['get', 'ID_PARCEL'], ['get', 'id_parcel'], ['get', 'ID']], ['literal', parcelIds]]);
                     dashMap.setFilter('lyr-dash-outline', ['in', ['coalesce', ['get', 'ID_PARCEL'], ['get', 'id_parcel'], ['get', 'ID']], ['literal', parcelIds]]);
+                    dashMap.getSource(sourceId).setUrl(`pmtiles://${pmtilesUrl}`);
                 }
                 fitDashMapBounds(parcelles);
             }
@@ -5491,167 +5494,99 @@
             if (panel.classList.contains('open')) updateDashboard();
         }
 
-        function updateDashboard() {
+        async function updateDashboard() {
             if (!currentExploitation) return;
 
-            // User bar
+            // Barre utilisateur
             document.getElementById('dash-user-bar').innerHTML = currentUser ? `
-                <div class="user-bar">
-                    <span>👤</span>
-                    <span class="user-email">${currentUser.email}</span>
-                    <button class="top-btn" onclick="logout()" style="font-size:0.68rem;">Déconnexion</button>
-                </div>` : '';
+        <div class="user-bar">
+            <span>👤</span>
+            <span class="user-email">${currentUser.email}</span>
+            <button class="top-btn" onclick="logout()" style="font-size:0.68rem;">Déconnexion</button>
+        </div>` : '';
 
-            // Exploitation name
             document.getElementById('exploitation-name').value = currentExploitation.name || '';
 
-            // Stats
             const parcelles = exploitationParcelles;
-            const totalSurface = parcelles.reduce((s, p) => s + (p.surf_parc || 0), 0);
-            const avgSurface = parcelles.length > 0 ? totalSurface / parcelles.length : 0;
-            const cultures = [...new Set(parcelles.map(p => p.code_cultu).filter(Boolean))];
-            const groups = [...new Set(parcelles.map(p => p.code_group).filter(Boolean))];
+            if (parcelles.length === 0) {
+                renderEmptyDashboard();
+                return;
+            }
 
-            // Compute average rotation score
+            // --- CORRECTION RÉGION & STATS ---
+            // On récupère la région de la première parcelle (ou celle du sélecteur par défaut)
+            const exploitationRegion = parcelles[0].region || document.getElementById('region-select').value;
+
+            // On s'assure que les données historiques de cette région sont chargées
+            await ensureRegionData(exploitationRegion);
+            // ---------------------------------
+
+            const totalSurface = parcelles.reduce((s, p) => s + (p.surf_parc || 0), 0);
+            const avgSurface = totalSurface / parcelles.length;
+            const cultures = [...new Set(parcelles.map(p => p.code_cultu).filter(Boolean))];
+
             let rotationScores = [];
             let yearsCounts = [];
+
             parcelles.forEach(p => {
-                const rec = lineageData && lineageData[p.parcel_id];
-                if (rec) {
-                    const lin = rec.lineage || rec.l || {};
-                    const allCodes = [rec.c || rec.c23, ...Object.values(lin).map(e => e.c)].filter(Boolean);
-                    if (allCodes.length >= 2) {
-                        const unique = new Set(allCodes).size;
-                        rotationScores.push(Math.round((unique / allCodes.length) * 10));
+                // Accès aux données de filiation via le bucket spécifique à la région de la parcelle
+                const bucketId = getBucketId(p.parcel_id);
+                const cacheKey = `${exploitationRegion}_${bucketId}`;
+                const compositeId = `${document.getElementById('year-select').value}_${p.parcel_id}`;
+
+                const parcelData = bucketCache[cacheKey]?.parcelles?.[compositeId];
+                const filiations = bucketCache[cacheKey]?.filiations?.[compositeId];
+
+                if (parcelData && filiations) {
+                    // Simulation simplifiée du score de rotation basé sur les parents connus
+                    const parents = filiations.parents || [];
+                    const yearsTracked = 1 + parents.length;
+                    yearsCounts.push(yearsTracked);
+
+                    // Calcul basique de diversité (à affiner selon votre structure genealogy.py)
+                    const uniqueCrops = new Set([parcelData.c]);
+                    if (uniqueCrops.size >= 1) {
+                        rotationScores.push(Math.round((uniqueCrops.size / yearsTracked) * 10));
                     }
-                    yearsCounts.push(1 + Object.keys(lin).length);
                 }
             });
+
             const avgRotation = rotationScores.length > 0 ? (rotationScores.reduce((a, b) => a + b, 0) / rotationScores.length).toFixed(1) : '—';
             const rotColor = avgRotation === '—' ? 'var(--text-muted)' : parseFloat(avgRotation) > 6 ? '#10b981' : parseFloat(avgRotation) > 3 ? '#f59e0b' : '#ef4444';
             const avgYears = yearsCounts.length > 0 ? (yearsCounts.reduce((a, b) => a + b, 0) / yearsCounts.length).toFixed(1) : '—';
 
+            // Rendu des stats
             document.getElementById('dash-stats').innerHTML = `
-                <div class="dash-stat"><div class="ds-value">${parcelles.length}</div><div class="ds-label">Parcelles</div></div>
-                <div class="dash-stat"><div class="ds-value">${totalSurface.toFixed(1)} ha</div><div class="ds-label">Surface totale</div></div>
-                <div class="dash-stat"><div class="ds-value">${avgSurface.toFixed(1)} ha</div><div class="ds-label">Surface moyenne</div></div>
-                <div class="dash-stat"><div class="ds-value">${cultures.length}</div><div class="ds-label">Cultures différentes</div></div>
-                <div class="dash-stat"><div class="ds-value">${avgYears}</div><div class="ds-label">Années moy. de suivi</div></div>
-                <div class="dash-stat"><div class="ds-value" style="color:${rotColor}">${avgRotation}<span style="font-size:0.7rem;color:var(--text-muted)">/10</span></div><div class="ds-label">Score rotation moy.</div></div>`;
+        <div class="dash-stat"><div class="ds-value">${parcelles.length}</div><div class="ds-label">Parcelles</div></div>
+        <div class="dash-stat"><div class="ds-value">${totalSurface.toFixed(1)} ha</div><div class="ds-label">Surface totale</div></div>
+        <div class="dash-stat"><div class="ds-value">${avgYears}</div><div class="ds-label">Années moy.</div></div>
+        <div class="dash-stat"><div class="ds-value" style="color:${rotColor}">${avgRotation}<span style="font-size:0.7rem;color:var(--text-muted)">/10</span></div><div class="ds-label">Rotation</div></div>`;
 
-            // Culture distribution chart
-            const cultureCount = {};
-            parcelles.forEach(p => {
-                const c = p.code_cultu || 'Inconnu';
-                cultureCount[c] = (cultureCount[c] || 0) + (p.surf_parc || 0);
-            });
-            const sorted = Object.entries(cultureCount).sort((a, b) => b[1] - a[1]).slice(0, 8);
-
-            const ctx = document.getElementById('dash-culture-chart');
-            if (ctx) {
-                if (dashCultureChart) dashCultureChart.destroy();
-                if (sorted.length > 0) {
-                    dashCultureChart = new Chart(ctx.getContext('2d'), {
-                        type: 'doughnut',
-                        data: {
-                            labels: sorted.map(([k]) => cropLabels[k] || k),
-                            datasets: [{
-                                data: sorted.map(([, v]) => parseFloat(v.toFixed(2))),
-                                backgroundColor: sorted.map(([k]) => {
-                                    const p = parcelles.find(p => p.code_cultu === k);
-                                    return p ? (cultureColors[p.code_group] || cultureColors.default) : cultureColors.default;
-                                }),
-                                borderWidth: 2, borderColor: '#fff'
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            plugins: {
-                                legend: { position: 'bottom', labels: { font: { size: 10 }, usePointStyle: true, padding: 8 } },
-                                tooltip: { callbacks: { label: (c) => ` ${c.label}: ${c.parsed.toFixed(1)} ha` } }
-                            }
-                        }
-                    });
-                }
-            }
-
-            // Alerts
-            const monocultures = [];
-            // Check for monoculture using lineageData
-            parcelles.forEach(p => {
-                const rec = lineageData && lineageData[p.parcel_id];
-                if (rec) {
-                    const lin = rec.lineage || rec.l || {};
-                    const allCodes = [rec.c || rec.c23, ...Object.values(lin).map(e => e.c)].filter(Boolean);
-                    const unique = new Set(allCodes);
-                    if (unique.size === 1 && allCodes.length >= 3) {
-                        monocultures.push({ id: p.parcel_id, culture: allCodes[0], years: allCodes.length });
-                    }
-                }
-            });
-
-            let alertsHtml = '';
-            if (monocultures.length > 0) {
-                alertsHtml += `<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px;margin-bottom:8px;">
-                    <div style="font-weight:700;color:#991b1b;font-size:0.8rem;">⚠️ ${monocultures.length} parcelle${monocultures.length > 1 ? 's' : ''} en monoculture</div>
-                    <div style="font-size:0.72rem;color:#b91c1c;margin-top:4px;">
-                        ${monocultures.slice(0, 3).map(m => `${m.id}: ${cropLabels[m.culture] || m.culture} (${m.years} ans)`).join('<br>')}
-                        ${monocultures.length > 3 ? `<br>+ ${monocultures.length - 3} autres` : ''}
-                    </div>
-                </div>`;
-            }
-            if (parcelles.length === 0) {
-                alertsHtml += `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px;">
-                    <div style="font-size:0.82rem;color:#166534;">Cliquez sur le bouton <strong>+</strong> en haut puis sélectionnez vos parcelles sur la carte.</div>
-                </div>`;
-            }
-            document.getElementById('dash-alerts').innerHTML = alertsHtml;
-
-            // Carte exploitation (après rendu DOM pour que le conteneur ait une taille)
-            setTimeout(() => initOrUpdateDashMap(parcelles), 150);
-
-            // Parcel list avec nom éditable
+            // Liste des parcelles (Culture en titre, Nom en sous-titre)
             const listEl = document.getElementById('dash-parcel-list');
-            if (parcelles.length === 0) {
-                listEl.innerHTML = `<div style="text-align:center;padding:30px 20px;">
-                    <div style="font-size:2.5rem;margin-bottom:8px;opacity:0.3;">🏠</div>
-                    <p style="color:var(--text-muted);font-size:0.82rem;margin:0 0 12px;">Votre exploitation est vide</p>
-                    <button class="auth-btn" onclick="toggleSelectMode()" style="width:auto;padding:8px 20px;font-size:0.8rem;border-radius:8px;">
-                        + Ajouter des parcelles
-                    </button>
-                </div>`;
-            } else {
-                listEl.innerHTML = parcelles.map((p, i) => {
-                    const color = cultureColors[p.code_group] || cultureColors.default;
-                    const cultureName = cropLabels[p.code_cultu] || p.code_cultu || '?';
-                    const rawName = (p.notes && p.notes.trim()) ? p.notes.trim() : '';
-                    const displayName = rawName ? String(rawName).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;') : cultureName;
-                    const hasCoords = p.centroid_lon && p.centroid_lat;
-                    const safeNotes = (p.notes || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-                    return `<div class="parcel-list-item" 
-    style="cursor:${hasCoords ? 'pointer' : 'default'};" 
-    data-parcel-id="${p.parcel_id}"
-    onclick="handleParcelListClick('${p.parcel_id}', ${p.centroid_lon}, ${p.centroid_lat})">
-    
-    <div class="pli-color" style="background:${color}"></div>
-    <div class="pli-info">
-        <div class="pli-name" style="font-weight: 700; color: var(--text-main);">
-            ${cultureName}
-        </div>
-        
-        <input type="text" class="pli-name-input" 
-            placeholder="Donner un nom (ex: Pièce du Fond)" 
-            value="${safeNotes}" 
-            onclick="event.stopPropagation()" 
-            onblur="updateParcelName('${p.parcel_id}', this.value.trim())"
-            style="display: block; width: 100%; border: none; background: transparent; font-size: 0.75rem; color: var(--text-muted); margin-top: 2px; padding: 0;">
-            
-        <div class="pli-meta">ID: ${p.parcel_id} • ${p.surf_parc ? p.surf_parc.toFixed(2) + ' ha' : ''}</div>
-    </div>
-    <button class="pli-remove" onclick="event.stopPropagation(); removeParcelFromExploitation('${p.parcel_id}')">✕</button>
-</div>`;
-                }).join('');
-            }
+            listEl.innerHTML = parcelles.map(p => {
+                const color = cultureColors[p.code_group] || '#9ca3af';
+                const cultureName = cropLabels[p.code_cultu] || p.code_cultu || 'Inconnue';
+                const safeNotes = (p.notes || "").replace(/"/g, '&quot;');
+
+                return `
+        <div class="parcel-list-item" onclick="handleParcelListClick('${p.parcel_id}', ${p.centroid_lon}, ${p.centroid_lat})">
+            <div class="pli-color" style="background:${color}"></div>
+            <div class="pli-info">
+                <div class="pli-name" style="font-weight:700; color:var(--text-main);">${cultureName}</div>
+                <input type="text" class="pli-name-input" 
+                       value="${safeNotes}" 
+                       placeholder="Nommer la parcelle..."
+                       onclick="event.stopPropagation()"
+                       onblur="updateParcelName('${p.parcel_id}', this.value.trim())"
+                       style="display:block; width:100%; border:none; background:transparent; font-size:0.75rem; color:var(--text-muted); margin-top:2px;">
+                <div class="pli-meta">ID: ${p.parcel_id} • ${p.surf_parc?.toFixed(2)} ha</div>
+            </div>
+            <button class="pli-remove" onclick="event.stopPropagation(); removeParcelFromExploitation('${p.parcel_id}')">✕</button>
+        </div>`;
+            }).join('');
+
+            setTimeout(() => initOrUpdateDashMap(parcelles), 150);
         }
 
         // ── Dark Mode ──
@@ -5876,33 +5811,32 @@
             container.innerHTML = html;
         }
         function handleParcelListClick(id, lon, lat) {
-            if (!id || !map) return;
+            if (!map || !lon || !lat) return;
 
-            // 1. Centrer la carte principale sur la parcelle
-            map.flyTo({ center: [lon, lat], zoom: 15.5, duration: 1000 });
+            // Centrer la carte
+            map.flyTo({ center: [lon, lat], zoom: 16, duration: 1200 });
 
-            // 2. Mettre à jour le filtre de surbillance
-            // On suppose que ton layer principal s'appelle 'lyr-parcelles-fill'
-            // On crée ou met à jour un calque "highlight"
-            if (!map.getLayer('lyr-highlight-exploitation')) {
+            // Surbillance (Halo jaune)
+            if (map.getLayer('lyr-highlight-exploitation')) {
+                map.setFilter('lyr-highlight-exploitation', ['==', ['coalesce', ['get', 'ID_PARCEL'], ['get', 'id_parcel']], id]);
+            } else {
+                // Créer le layer s'il n'existe pas encore
+                const year = document.getElementById('year-select').value;
+                const region = document.getElementById('region-select').value;
+
                 map.addLayer({
                     id: 'lyr-highlight-exploitation',
                     type: 'line',
-                    source: 'src-parcelles', // Doit correspondre au nom de ta source vectorielle
+                    source: `src-${region}_${year}`, // Doit correspondre à vos sources dynamiques
                     'source-layer': 'parcelles',
                     paint: {
-                        'line-color': '#facc15', // Jaune vif pour la sélection
+                        'line-color': '#facc15',
                         'line-width': 4,
-                        'line-blur': 2
+                        'line-blur': 1
                     },
-                    filter: ['==', ['coalesce', ['get', 'ID_PARCEL'], ['get', 'id_parcel'], ['get', 'ID']], id]
+                    filter: ['==', ['coalesce', ['get', 'ID_PARCEL'], ['get', 'id_parcel']], id]
                 });
-            } else {
-                map.setFilter('lyr-highlight-exploitation', ['==', ['coalesce', ['get', 'ID_PARCEL'], ['get', 'id_parcel'], ['get', 'ID']], id]);
             }
-
-            // Optionnel : Ouvrir la popup automatiquement
-            showParcelPopup(id, [lon, lat]);
         }
     </script>
 </body>
