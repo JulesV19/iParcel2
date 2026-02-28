@@ -1942,6 +1942,28 @@
             margin-top: 4px;
         }
 
+        .dash-section-label {
+            display: block;
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--text-main);
+            margin: 0 0 8px 0;
+        }
+        .dash-exploitation-map {
+            width: 100%;
+            height: 220px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border);
+            overflow: hidden;
+            background: var(--border-light);
+            margin-bottom: 4px;
+        }
+        .dash-map-hint {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            margin: 0 0 16px 0;
+        }
+
         .parcel-list-item {
             display: flex;
             align-items: center;
@@ -1972,6 +1994,19 @@
         .parcel-list-item .pli-name {
             font-weight: 600;
             font-size: 0.82rem;
+        }
+        .parcel-list-item .pli-name-input {
+            width: 100%;
+            margin-top: 4px;
+            padding: 4px 8px;
+            font-size: 0.78rem;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: var(--panel-bg);
+            color: var(--text-main);
+        }
+        .parcel-list-item .pli-name-input::placeholder {
+            color: var(--text-muted);
         }
 
         .parcel-list-item .pli-meta {
@@ -2728,6 +2763,9 @@
             <input class="auth-input" id="exploitation-name" placeholder="Nom de l'exploitation"
                 style="margin-bottom:14px;font-weight:600;" onchange="renameExploitation(this.value)">
             <div class="dash-stat-grid" id="dash-stats"></div>
+            <label class="dash-section-label">🗺️ Carte de l'exploitation</label>
+            <div id="dash-exploitation-map" class="dash-exploitation-map"></div>
+            <p class="dash-map-hint">Cliquez sur une parcelle pour la localiser sur la carte principale.</p>
             <div id="dash-rotation-chart" style="margin-bottom:16px;">
                 <canvas id="dash-culture-chart" height="180"></canvas>
             </div>
@@ -5003,6 +5041,7 @@
         let selectMode = false;
         let authMode = 'login'; // 'login' or 'register'
         let dashCultureChart = null;
+        let dashMap = null;
 
         // ── Auth ──
         async function initAuth() {
@@ -5261,6 +5300,30 @@
             updateSelectCount();
         }
 
+        async function updateParcelName(parcelId, name) {
+            if (!currentExploitation) return;
+            const p = exploitationParcelles.find(x => x.parcel_id === parcelId);
+            if (!p) return;
+            const prevNotes = (p.notes || '').trim();
+            if (prevNotes === (name || '').trim()) return;
+            p.notes = name || null;
+            const { error } = await sb.from('exploitation_parcelles')
+                .update({ notes: name || null })
+                .eq('exploitation_id', currentExploitation.id)
+                .eq('parcel_id', parcelId);
+            if (error) {
+                p.notes = prevNotes || null;
+                showToast('Erreur lors de l\'enregistrement du nom', '❌');
+                return;
+            }
+            const listItem = document.querySelector(`.parcel-list-item[data-parcel-id="${parcelId}"] .pli-name`);
+            if (listItem) {
+                const cultureName = cropLabels[p.code_cultu] || p.code_cultu || '?';
+                listItem.textContent = (name && name.trim()) ? name.trim() : cultureName;
+            }
+            showToast('Nom enregistré', '✅');
+        }
+
         // ── Select Mode ──
         function toggleSelectMode() {
             if (!currentUser) { showAuthModal(); return; }
@@ -5334,6 +5397,87 @@
             if (map.getLayer('exploitation-parcelles-fill')) map.removeLayer('exploitation-parcelles-fill');
             if (map.getLayer('exploitation-parcelles-line')) map.removeLayer('exploitation-parcelles-line');
             if (map.getSource('exploitation-parcelles-src')) map.removeSource('exploitation-parcelles-src');
+        }
+
+        function initOrUpdateDashMap(parcelles) {
+            const withCoords = parcelles.filter(p => p.centroid_lon != null && p.centroid_lat != null);
+            if (withCoords.length === 0) return;
+            const container = document.getElementById('dash-exploitation-map');
+            if (!container) return;
+
+            if (!dashMap) {
+                dashMap = new maplibregl.Map({
+                    container: 'dash-exploitation-map',
+                    style: {
+                        version: 8,
+                        sources: {
+                            basemap: { type: 'raster', tiles: [basemaps[0].tiles], tileSize: 256 }
+                        },
+                        layers: [{ id: 'basemap-layer', type: 'raster', source: 'basemap' }]
+                    },
+                    center: [withCoords[0].centroid_lon, withCoords[0].centroid_lat],
+                    zoom: 12,
+                    attributionControl: false,
+                    interactive: true
+                });
+                dashMap.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+                dashMap.on('load', () => {
+                    const features = withCoords.map(p => ({
+                        type: 'Feature',
+                        geometry: { type: 'Point', coordinates: [p.centroid_lon, p.centroid_lat] },
+                        properties: { parcel_id: p.parcel_id }
+                    }));
+                    dashMap.addSource('dash-parcels', {
+                        type: 'geojson',
+                        data: { type: 'FeatureCollection', features }
+                    });
+                    dashMap.addLayer({
+                        id: 'dash-parcels-fill',
+                        type: 'circle',
+                        source: 'dash-parcels',
+                        paint: {
+                            'circle-radius': 10,
+                            'circle-color': '#10b981',
+                            'circle-opacity': 0.85,
+                            'circle-stroke-color': '#fff',
+                            'circle-stroke-width': 2
+                        }
+                    });
+                    dashMap.getCanvas().style.cursor = 'pointer';
+                    dashMap.on('click', 'dash-parcels-fill', (e) => {
+                        if (e.features && e.features[0]) {
+                            const coords = e.features[0].geometry.coordinates.slice();
+                            if (map && mapReady) map.flyTo({ center: coords, zoom: 16, duration: 1200 });
+                        }
+                    });
+                    fitDashMapBounds(withCoords);
+                });
+            } else {
+                const features = withCoords.map(p => ({
+                    type: 'Feature',
+                    geometry: { type: 'Point', coordinates: [p.centroid_lon, p.centroid_lat] },
+                    properties: { parcel_id: p.parcel_id }
+                }));
+                const src = dashMap.getSource('dash-parcels');
+                if (src) src.setData({ type: 'FeatureCollection', features });
+                fitDashMapBounds(withCoords);
+            }
+        }
+
+        function fitDashMapBounds(parcelles) {
+            if (!dashMap || parcelles.length === 0) return;
+            const withCoords = parcelles.filter(p => p.centroid_lon != null && p.centroid_lat != null);
+            if (withCoords.length === 0) return;
+            if (withCoords.length === 1) {
+                dashMap.flyTo({ center: [withCoords[0].centroid_lon, withCoords[0].centroid_lat], zoom: 14, duration: 0 });
+            } else {
+                const lngs = withCoords.map(p => p.centroid_lon);
+                const lats = withCoords.map(p => p.centroid_lat);
+                const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
+                const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+                const padding = 0.002;
+                dashMap.fitBounds([[minLng - padding, minLat - padding], [maxLng + padding, maxLat + padding]], { padding: 24, maxZoom: 14, duration: 0 });
+            }
         }
 
         // ── Dashboard ──
@@ -5463,7 +5607,10 @@
             }
             document.getElementById('dash-alerts').innerHTML = alertsHtml;
 
-            // Parcel list
+            // Carte exploitation (après rendu DOM pour que le conteneur ait une taille)
+            setTimeout(() => initOrUpdateDashMap(parcelles), 150);
+
+            // Parcel list avec nom éditable
             const listEl = document.getElementById('dash-parcel-list');
             if (parcelles.length === 0) {
                 listEl.innerHTML = `<div style="text-align:center;padding:30px 20px;">
@@ -5476,13 +5623,19 @@
             } else {
                 listEl.innerHTML = parcelles.map((p, i) => {
                     const color = cultureColors[p.code_group] || cultureColors.default;
-                    const name = cropLabels[p.code_cultu] || p.code_cultu || '?';
+                    const cultureName = cropLabels[p.code_cultu] || p.code_cultu || '?';
+                    const rawName = (p.notes && p.notes.trim()) ? p.notes.trim() : '';
+                    const displayName = rawName ? String(rawName).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;') : cultureName;
                     const hasCoords = p.centroid_lon && p.centroid_lat;
-                    return `<div class="parcel-list-item" style="cursor:${hasCoords ? 'pointer' : 'default'};animation:fadeIn 0.3s ease ${i * 0.03}s both;"
-                        ${hasCoords ? `onclick="map.flyTo({center:[${p.centroid_lon},${p.centroid_lat}],zoom:16,duration:1200})"` : ''}>
+                    const safeNotes = (p.notes || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+                    return `<div class="parcel-list-item" style="cursor:${hasCoords ? 'pointer' : 'default'};animation:fadeIn 0.3s ease ${i * 0.03}s both;" data-parcel-id="${p.parcel_id}"
+                        ${hasCoords ? `onclick="if(!event.target.closest('button') && !event.target.closest('.pli-name-input')) map.flyTo({center:[${p.centroid_lon},${p.centroid_lat}],zoom:16,duration:1200})"` : ''}>
                         <div class="pli-color" style="background:${color}"></div>
                         <div class="pli-info">
-                            <div class="pli-name">${name}</div>
+                            <div class="pli-name">${displayName}</div>
+                            <input type="text" class="pli-name-input" placeholder="Nom de la parcelle" value="${safeNotes}" data-parcel-id="${p.parcel_id}"
+                                onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter')this.blur()"
+                                onblur="updateParcelName('${p.parcel_id}', this.value.trim())">
                             <div class="pli-meta">#${p.parcel_id} · ${p.surf_parc ? p.surf_parc.toFixed(2) + ' ha' : '—'}</div>
                         </div>
                         <button class="pli-remove" onclick="event.stopPropagation();removeParcelFromExploitation('${p.parcel_id}')" title="Retirer">✕</button>
