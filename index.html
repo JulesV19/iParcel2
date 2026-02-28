@@ -293,7 +293,9 @@
         /* ─────────────────────────────────────────────
    🌳 GENEALOGY TREE
 ───────────────────────────────────────────── */
-        .tree-viewport { padding: 4px 0 14px; }
+        .tree-viewport {
+            padding: 4px 0 14px;
+        }
 
         /* Rangée par année */
         .gtree-row {
@@ -303,6 +305,7 @@
             gap: 0;
             min-height: 56px;
         }
+
         /* Badge année à gauche */
         .gtree-year {
             width: 44px;
@@ -313,6 +316,7 @@
             padding-top: 14px;
             position: relative;
         }
+
         .gtree-year-label {
             font-size: 0.68rem;
             font-weight: 800;
@@ -321,18 +325,27 @@
             background: var(--panel-bg, white);
             padding: 2px 0;
         }
+
         /* Ligne verticale à travers les années */
         .gtree-year::after {
             content: “”;
             position: absolute;
-            top: 0; bottom: 0; left: 50%;
+            top: 0;
+            bottom: 0;
+            left: 50%;
             width: 2px;
             background: var(--border);
             transform: translateX(-50%);
             z-index: 0;
         }
-        .gtree-row:first-child .gtree-year::after { top: 14px; }
-        .gtree-row:last-child .gtree-year::after { bottom: 50%; }
+
+        .gtree-row:first-child .gtree-year::after {
+            top: 14px;
+        }
+
+        .gtree-row:last-child .gtree-year::after {
+            bottom: 50%;
+        }
 
         /* Zone des noeuds */
         .gtree-nodes {
@@ -357,18 +370,22 @@
             transition: var(--transition);
             position: relative;
         }
+
         .gtree-node:hover {
             box-shadow: var(--shadow-md);
             transform: translateY(-1px);
-            border-color: rgba(16,185,129,0.4);
+            border-color: rgba(16, 185, 129, 0.4);
         }
+
         .gtree-node.is-current {
             border: 2px solid var(--accent);
-            box-shadow: 0 0 0 3px rgba(16,185,129,0.15);
+            box-shadow: 0 0 0 3px rgba(204, 216, 212, 0.15);
         }
+
         .gtree-node.is-main {
             border-left: 5px solid var(--accent);
         }
+
         .gtree-node.is-sibling {
             border-left: 4px solid #94a3b8;
             opacity: 0.85;
@@ -384,6 +401,7 @@
         .gtree-body {
             padding: 7px 9px 8px;
         }
+
         .gtree-crop {
             font-size: 0.78rem;
             font-weight: 800;
@@ -392,18 +410,21 @@
             overflow: hidden;
             text-overflow: ellipsis;
         }
+
         .gtree-id {
             font-size: 0.62rem;
             color: var(--text-muted);
             margin-top: 2px;
             font-variant-numeric: tabular-nums;
         }
+
         .gtree-pct {
             font-size: 0.60rem;
             font-weight: 700;
             color: var(--text-secondary);
             margin-top: 3px;
         }
+
         .gtree-badge {
             display: inline-block;
             font-size: 0.58rem;
@@ -421,6 +442,7 @@
             height: 16px;
             margin-left: 44px;
         }
+
         .gtree-connectors svg {
             width: 100%;
             height: 100%;
@@ -446,13 +468,16 @@
             background: #0f172a;
             border-color: #334155;
         }
+
         body.dark-mode .gtree-node.is-current {
             border-color: var(--accent);
         }
+
         body.dark-mode .gtree-year-label,
         body.dark-mode .gtree-link-tag {
             background: var(--panel-bg, #0f172a);
         }
+
         body.dark-mode .gtree-year::after {
             background: #334155;
         }
@@ -2276,8 +2301,9 @@
                     <option value="BRETAGNE">📍 Bretagne</option>
                     <option value="NORMANDIE">🍎 Normandie</option>
                     <option value="PAYS_DE_LA_LOIRE">🌊 Pays de la Loire</option>
-                    <option value="CENTRE-VAL_DE_LOIRE">🏰 Centre-Val de Loire</option>
+                    <option value="CENTRE_VAL_DE_LOIRE">🏰 Centre-Val de Loire</option>
                     <option value="ILE_DE_FRANCE">🗼 Île-de-France</option>
+                    <option value="NOUVELLE_AQUITAINE">🌻 Nouvelle-Aquitaine</option>
                 </select>
             </div>
 
@@ -2610,11 +2636,12 @@
                 <label>🌍 Région d'étude</label>
                 <select id="region-select">
                     <option value="ALL">🌟 TOUTES LES RÉGIONS</option>
-                    <option value="BRETAGNE">📍 Bretagne</option>
+                    <option value="BRETAGNE" selected>📍 Bretagne</option>
                     <option value="NORMANDIE">🍎 Normandie</option>
                     <option value="PAYS_DE_LA_LOIRE">🌊 Pays de la Loire</option>
-                    <option value="CENTRE-VAL_DE_LOIRE">🏰 Centre-Val de Loire</option>
+                    <option value="CENTRE_VAL_DE_LOIRE">🏰 Centre-Val de Loire</option>
                     <option value="ILE_DE_FRANCE">🗼 Île-de-France</option>
+                    <option value="NOUVELLE_AQUITAINE">🌻 Nouvelle-Aquitaine</option>
                 </select>
                 <label>📅 Année de Campagne</label>
                 <select id="year-select">
@@ -2904,8 +2931,17 @@
             loaderStep(60, 'Chargement des parcelles');
             mapReady = true;
             const year = document.getElementById('year-select').value;
+            const region = document.getElementById('region-select').value;
 
-            try { ensureLayer(year); } catch (e) { console.warn('ensureLayer:', e); }
+            try {
+                if (region === 'ALL') {
+                    [...document.getElementById('region-select').options]
+                        .map(o => o.value).filter(v => v !== 'ALL')
+                        .forEach(r => ensureLayer(year, r));
+                } else {
+                    ensureLayer(year, region);
+                }
+            } catch (e) { console.warn('ensureLayer:', e); }
 
             loaderStep(80, 'Chargement des données');
             init().then(() => {
@@ -3616,16 +3652,29 @@
                 if (!mapReady) return;
                 const year = this.value;
                 const op = document.getElementById('opacity-slider').value / 100;
-                ensureLayer(year);
+                const region = document.getElementById('region-select').value;
+
+                // Charger les layers nécessaires pour la nouvelle année
+                if (region === 'ALL') {
+                    [...document.getElementById('region-select').options]
+                        .map(o => o.value).filter(v => v !== 'ALL')
+                        .forEach(r => ensureLayer(year, r));
+                } else {
+                    ensureLayer(year, region);
+                }
+
                 // Masquer toutes les couches sauf l'année sélectionnée
                 // Les layers sont nommées lyr-{REGION}_{year}, pas lyr-{year}
                 map.getStyle().layers.forEach(lyr => {
                     if (lyr.id.startsWith('lyr-') && lyr.id !== 'highlight-fill') {
                         const isSelected = lyr.id.includes(`_${year}`);
+                        // En mode région unique, ne montrer que la bonne région
+                        const isCorrectRegion = region === 'ALL' || lyr.id.includes(region);
+                        const visible = isSelected && isCorrectRegion;
                         if (lyr.type === 'fill') {
-                            map.setPaintProperty(lyr.id, 'fill-opacity', isSelected ? op : 0);
+                            map.setPaintProperty(lyr.id, 'fill-opacity', visible ? op : 0);
                         } else if (lyr.type === 'line' && lyr.id.endsWith('-outline')) {
-                            map.setPaintProperty(lyr.id, 'line-opacity', isSelected ? 1 : 0);
+                            map.setPaintProperty(lyr.id, 'line-opacity', visible ? 1 : 0);
                         }
                     }
                 });
@@ -3641,7 +3690,9 @@
             const op = document.getElementById('opacity-slider').value / 100;
 
             // Liste de TOUTES les régions disponibles sur ton Hugging Face
-            const allRegions = ["BRETAGNE", "NORMANDIE", "PAYS_DE_LA_LOIRE", "CENTRE-VAL_DE_LOIRE", "ILE_DE_FRANCE"];
+            // Construire la liste depuis les options du select (toujours synchronisé)
+            const allRegions = [...document.getElementById('region-select').options]
+                .map(o => o.value).filter(v => v !== 'ALL');
 
             if (region === "ALL") {
                 // 1. On lance le chargement de chaque région pour l'année choisie
