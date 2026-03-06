@@ -1,0 +1,24 @@
+{
+  "name": "parcelle-twin",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.1",
+    "@turf/turf": "^6.5.0",
+    "chart.js": "^4.4.0",
+    "geotiff": "^2.0.5",
+    "maplibre-gl": "^3.6.2",
+    "papaparse": "^5.4.1",
+    "pmtiles": "^3.0.6",
+    "proj4": "^2.9.0"
+  },
+  "devDependencies": {
+    "vite": "^5.4.0"
+  }
+}

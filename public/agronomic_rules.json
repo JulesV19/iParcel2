@@ -1,0 +1,102 @@
+{
+    "ROOT_SYSTEM_MAP": {
+        "BLE": "F",
+        "BTH": "F",
+        "BTP": "F",
+        "BTD": "F",
+        "ORG": "F",
+        "ORH": "F",
+        "ORP": "F",
+        "AVO": "F",
+        "AVH": "F",
+        "AVP": "F",
+        "SEI": "F",
+        "TRI": "F",
+        "EPE": "F",
+        "MAI": "F",
+        "MAA": "F",
+        "MAF": "F",
+        "MAE": "F",
+        "SOR": "F",
+        "MIL": "F",
+        "COL": "P",
+        "CZH": "P",
+        "CZP": "P",
+        "TRN": "P",
+        "SOJ": "P",
+        "POI": "P",
+        "FEV": "P",
+        "LUZ": "P",
+        "TRE": "P",
+        "PRA": "M",
+        "PPH": "M",
+        "PTR": "M",
+        "BET": "P",
+        "POM": "F",
+        "JAC": "M",
+        "AUT": "M"
+    },
+    "TRANSITION_MATRIX": {
+        "cereals": {
+            "cereals": -1.0,
+            "oilseeds": 1.2,
+            "legumes": 1.0,
+            "rest": 1.5,
+            "industrial": 0.8
+        },
+        "oilseeds": {
+            "cereals": 1.5,
+            "oilseeds": -2.0,
+            "legumes": 0.5,
+            "rest": 1.0,
+            "industrial": 1.0
+        },
+        "legumes": {
+            "cereals": 2.0,
+            "oilseeds": 1.5,
+            "legumes": -2.5,
+            "rest": 0.8,
+            "industrial": 1.2
+        },
+        "rest": {
+            "cereals": 1.8,
+            "oilseeds": 1.5,
+            "legumes": 1.5,
+            "rest": 1.0,
+            "industrial": 1.5
+        },
+        "industrial": {
+            "cereals": 1.0,
+            "oilseeds": 0.8,
+            "legumes": 0.5,
+            "rest": 1.2,
+            "industrial": -1.5
+        }
+    },
+    "RETURN_INTERVAL_THRESHOLDS": {
+        "TRN": 5,
+        "POI": 4,
+        "FEV": 4,
+        "COL": 3,
+        "CZH": 3,
+        "CZP": 3,
+        "BET": 3,
+        "POM": 4,
+        "MAI": 2,
+        "MAA": 2,
+        "MAF": 2,
+        "MAE": 2,
+        "BLE": 2,
+        "BTH": 2,
+        "BTP": 2,
+        "BTD": 2,
+        "ORG": 2,
+        "ORH": 2,
+        "ORP": 2
+    },
+    "SCORING_CONSTANTS": {
+        "DECAY_HALFLIFE": 3.0,
+        "VARIANCE_THRESHOLD": 1.5,
+        "VARIANCE_PENALTY_MULT": 0.2
+    }
+}

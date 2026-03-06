@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+httpx
+pydantic
+supabase
+python-dotenv
+numpy
+rasterio
+shapely
+Pillow
+pyproj
