@@ -24,6 +24,45 @@ export function toggleDashboard() {
     }
 }
 
+function renderAnalysisProgress(p) {
+    const status = p.analysis_status;
+    const progress = p.analysis_progress;
+
+    // Analyse terminée ou pas encore lancée avec données
+    if (status === 'Terminée' || status === 'Erreur') return '';
+
+    // Analyse en cours
+    if (progress !== undefined && progress !== null && progress < 100) {
+        return `
+        <div class="analysis-progress-container">
+            <div class="analysis-status-text">
+                <span>${status || 'Analyse satellite...'}</span>
+                <span>${progress}%</span>
+            </div>
+            <div class="analysis-progress-bar-wrap">
+                <div class="analysis-progress-bar" style="width: ${progress}%"></div>
+            </div>
+        </div>`;
+    }
+
+    // Pas de données NDVI et pas d'analyse en cours = en attente
+    const hasNdvi = p.ndvi_data && typeof p.ndvi_data === 'object' && Object.keys(p.ndvi_data).length > 0;
+    if (!hasNdvi && !status) {
+        return `
+        <div class="analysis-progress-container">
+            <div class="analysis-status-text">
+                <span>En attente d'analyse satellite...</span>
+                <span>0%</span>
+            </div>
+            <div class="analysis-progress-bar-wrap">
+                <div class="analysis-progress-bar" style="width: 0%"></div>
+            </div>
+        </div>`;
+    }
+
+    return '';
+}
+
 export async function updateDashboard() {
     const currentExploitation = deps.getCurrentExploitation();
     if (!currentExploitation) return;
@@ -109,16 +148,7 @@ export async function updateDashboard() {
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                 </button>
             </div>
-            ${p.analysis_progress !== undefined && p.analysis_progress < 100 ? `
-            <div class="analysis-progress-container" style="flex-basis: 100%; margin-top: 10px; order: 3;">
-                <div class="analysis-status-text">
-                    <span>${p.analysis_status || 'Analyse satellite...'}</span>
-                    <span>${p.analysis_progress}%</span>
-                </div>
-                <div class="analysis-progress-bar-wrap">
-                    <div class="analysis-progress-bar" style="width: ${p.analysis_progress}%"></div>
-                </div>
-            </div>` : ''}`;
+            ${renderAnalysisProgress(p)}`;
 
         item.querySelector('.pli-actions button').onclick = (e) => {
             e.stopPropagation();
@@ -129,6 +159,45 @@ export async function updateDashboard() {
 
     // Assolement Chart
     renderDashboardChart(cultureSurface, totalSurface);
+}
+
+/**
+ * Lightweight update: only refreshes progress bars without rebuilding the whole list.
+ */
+export function updateParcelProgress(parcelId, progress, status) {
+    const item = document.querySelector(`.parcel-list-item[data-parcel-id="${parcelId}"]`);
+    if (!item) return;
+
+    let container = item.querySelector('.analysis-progress-container');
+
+    // Analysis finished — remove the progress bar
+    if (status === 'Terminée' || progress >= 100) {
+        if (container) container.remove();
+        return;
+    }
+
+    // No container yet — create one
+    if (!container) {
+        container = document.createElement('div');
+        container.className = 'analysis-progress-container';
+        container.innerHTML = `
+            <div class="analysis-status-text">
+                <span class="analysis-label"></span>
+                <span class="analysis-pct"></span>
+            </div>
+            <div class="analysis-progress-bar-wrap">
+                <div class="analysis-progress-bar"></div>
+            </div>`;
+        item.appendChild(container);
+    }
+
+    // Update values
+    const label = container.querySelector('.analysis-label');
+    const pct = container.querySelector('.analysis-pct');
+    const bar = container.querySelector('.analysis-progress-bar');
+    if (label) label.textContent = status || 'Analyse satellite...';
+    if (pct) pct.textContent = `${progress}%`;
+    if (bar) bar.style.width = `${progress}%`;
 }
 
 export function renderDashboardChart(cultureSurface, totalSurface) {

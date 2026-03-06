@@ -12,7 +12,6 @@ let satelliteState = null;
 
 // Satellite helpers (injected)
 let clearSatelliteOverlayFromMiniMap = null;
-let satelliteVizLoadAll = null;
 let displayCachedSatelliteNDVI = null;
 
 /**
@@ -23,7 +22,6 @@ let displayCachedSatelliteNDVI = null;
  * @param {function(): boolean} deps.isMapReady
  * @param {object} deps.satelliteState
  * @param {function} deps.clearSatelliteOverlayFromMiniMap
- * @param {function} deps.satelliteVizLoadAll
  * @param {function} deps.displayCachedSatelliteNDVI
  */
 export function setDependencies(deps) {
@@ -33,7 +31,6 @@ export function setDependencies(deps) {
     }
     satelliteState = deps.satelliteState;
     clearSatelliteOverlayFromMiniMap = deps.clearSatelliteOverlayFromMiniMap;
-    satelliteVizLoadAll = deps.satelliteVizLoadAll;
     displayCachedSatelliteNDVI = deps.displayCachedSatelliteNDVI;
 }
 
@@ -193,26 +190,6 @@ export function setupYearSelector(map, callbacks) {
 export function setupSatelliteFilters() {
     const monthNames = ["Janvier", "F\u00e9vrier", "Mars", "Avril", "Mai", "Juin", "Juillet", "Ao\u00fbt", "Septembre", "Octobre", "Novembre", "D\u00e9cembre"];
 
-    function applySatelliteFilters() {
-        // 1. Update state
-        satelliteState.maxClouds = parseInt(document.getElementById('sat-filter-cloud').value);
-        satelliteState.maxSnow = parseInt(document.getElementById('sat-filter-snow').value);
-
-        // 2. Clear cache because criteria have changed
-        satelliteState.cache = {};
-        clearSatelliteOverlayFromMiniMap();
-
-        // 3. Relaunch global search
-        satelliteVizLoadAll();
-    }
-
-    document.getElementById('sat-filter-cloud')?.addEventListener('input', function () {
-        document.getElementById('sat-filter-cloud-val').innerText = this.value + '%';
-    });
-    document.getElementById('sat-filter-snow')?.addEventListener('input', function () {
-        document.getElementById('sat-filter-snow-val').innerText = this.value + '%';
-    });
-
     const satSlider = document.getElementById('satellite-viz-slider');
     const satDateLabel = document.getElementById('satellite-viz-date');
 
@@ -238,7 +215,7 @@ export function setupSatelliteFilters() {
             } else if (cacheVal) {
                 displayCachedSatelliteNDVI(cacheKey);
             } else {
-                if (statusEl) statusEl.innerText = `Recherche d'image claire pour ${monthNames[monthIdx]} ${year}...`;
+                if (statusEl) statusEl.innerText = `Aucune donnée pour ${monthNames[monthIdx]} ${year}.`;
                 clearSatelliteOverlayFromMiniMap();
             }
         });

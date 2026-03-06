@@ -94,10 +94,11 @@ async function main() {
         showAuthModal: auth.showAuthModal,
         toggleSidebar: sidebar.toggleSidebar,
         updateDashboard: dashboard.updateDashboard,
+        updateParcelProgress: dashboard.updateParcelProgress,
         flyToParcel: (lon, lat) => map.map.flyTo({ center: [lon, lat], zoom: 16 }),
         removeParcelFromExploitation: auth.removeParcelFromExploitation,
         updateSelectCount: auth.updateSelectCount,
-        calcSatelliteNDVI: satellite.calcSatelliteNDVI,
+        onNdviDataUpdated: satellite.onNdviDataUpdated,
         regionToFile: utils.regionToFile,
         getMapColorExpression: legend.getMapColorExpression,
     };
@@ -117,7 +118,6 @@ async function main() {
         isMapReady: () => map.mapReady,
         satelliteState: satellite.satelliteState,
         clearSatelliteOverlayFromMiniMap: satellite.clearSatelliteOverlayFromMiniMap,
-        satelliteVizLoadAll: satellite.satelliteVizLoadAll,
         displayCachedSatelliteNDVI: satellite.displayCachedSatelliteNDVI,
     });
 
@@ -204,9 +204,8 @@ async function main() {
     window.parcelVizPrev = parcelViz.parcelVizPrev;
     window.parcelVizNext = parcelViz.parcelVizNext;
     window.parcelVizPlay = parcelViz.parcelVizPlay;
+    window.parcelVizPlay = parcelViz.parcelVizPlay;
     window.changeSatelliteMode = satellite.changeSatelliteMode;
-    window.satelliteVizLoadCurrent = satellite.satelliteVizLoadCurrent;
-    window.applySatelliteFilters = satellite.applySatelliteFilters;
     window.toggle3D = map.toggle3D;
     window.geolocate = map.geolocate;
     window.clearFilters = legend.clearFilters;

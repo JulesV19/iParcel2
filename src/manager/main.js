@@ -97,6 +97,7 @@ async function init() {
 
         fullParcels = parcelData || [];
         await enrichParcelsWithHistory();
+        setupRealtimeSubscription(exploitation.id);
         filterAndRender();
         setupListeners();
         document.getElementById('loader').classList.add('hidden');
@@ -104,6 +105,28 @@ async function init() {
         console.error("[Manager] Initialization error:", err);
         document.getElementById('loader').innerHTML = `<div style="color:red; padding:20px;">Erreur: ${err.message}</div>`;
     }
+}
+
+function setupRealtimeSubscription(exploitationId) {
+    console.log(`[Manager] Setting up realtime for exploitation ${exploitationId}`);
+    sb.channel('manager-updates')
+        .on('postgres_changes', {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'exploitation_parcelles',
+            filter: `exploitation_id=eq.${exploitationId}`
+        }, payload => {
+            console.log("[Manager] Realtime update received:", payload.new.parcel_id);
+            const updated = payload.new;
+            const p = fullParcels.find(x => x.parcel_id === updated.parcel_id);
+            if (p) {
+                p.analysis_status = updated.analysis_status;
+                p.analysis_progress = updated.analysis_progress;
+                if (updated.ndvi_data) p.ndvi_data = updated.ndvi_data;
+                filterAndRender();
+            }
+        })
+        .subscribe();
 }
 
 async function enrichParcelsWithHistory() {
@@ -115,13 +138,26 @@ async function enrichParcelsWithHistory() {
         let history = [];
         if (bucketData && bucketData[p.parcel_id]) {
             const hRaw = bucketData[p.parcel_id].historique || [];
+            // Handle multiple entries per year correctly
             history = hRaw.map(h => ({
-                y: parseInt(h.annee_hist), c: h.cultu_hist, g: cultureToGroup[h.cultu_hist] || '',
-                pct: h.pct_surface / 100, d1: h.cultu_d1 || "", d2: h.cultu_d2 || ""
+                y: parseInt(h.annee_hist),
+                c: h.cultu_hist,
+                g: cultureToGroup[h.cultu_hist] || '',
+                pct: (h.pct_surface || 100) / 100,
+                d1: h.cultu_d1 || "",
+                d2: h.cultu_d2 || ""
             })).sort((a, b) => b.y - a.y);
         }
 
-        history.unshift({ y: 2023, c: p.code_cultu, g: p.code_group, pct: 1.0, d1: p.culture_d1 || "", d2: p.culture_d2 || "" });
+        // Add current year (2023)
+        history.unshift({
+            y: 2023,
+            c: p.code_cultu,
+            g: p.code_group,
+            pct: 1.0,
+            d1: p.culture_d1 || "",
+            d2: p.culture_d2 || ""
+        });
 
         p.history = history;
         p.analysis = computeRotationScoreV3(history, agronomicRules);
@@ -183,6 +219,9 @@ function renderParcelList() {
         const card = document.createElement('div');
         card.className = 'parcel-card-v2';
         card.style.animationDelay = `${idx * 0.05}s`;
+
+        const isAnalyzing = p.analysis_progress !== undefined && p.analysis_progress < 100;
+
         card.innerHTML = `
             <div class="card-inner">
                 <div class="card-header-v2">
@@ -193,7 +232,10 @@ function renderParcelList() {
                     <div class="dpc-meta-item"><div class="dpc-meta-label">Surface</div><div class="dpc-meta-value">${parseFloat(p.surf_parc || 0).toFixed(2)} ha</div></div>
                     <div class="dpc-meta-item"><div class="dpc-meta-label">Culture</div><div class="dpc-meta-value">${cultureName}</div></div>
                 </div>
-                <div class="filter-label">Rotation 8 ans</div>
+
+                ${renderAnalysisStatus(p)}
+
+                <div class="filter-label" style="margin-top:20px;">Rotation 8 ans</div>
                 <div class="rotation-timeline">${renderRotationTimeline(p.history)}</div>
                 <div style="margin-top:20px;">
                     <div class="filter-label">Satellite</div>
@@ -206,6 +248,37 @@ function renderParcelList() {
         `;
         grid.appendChild(card);
     });
+}
+
+function renderAnalysisStatus(p) {
+    if (!p.analysis_status && p.analysis_progress === undefined) return '';
+
+    const status = p.analysis_status || "En attente...";
+    const progress = p.analysis_progress ?? 0;
+    const isDone = progress === 100;
+
+    if (isDone) {
+        return `
+            <div class="analysis-status-container" style="background: rgba(16, 185, 129, 0.05); border: 1px solid rgba(16, 185, 129, 0.1);">
+                <div class="analysis-status-text">
+                    <span style="color: #10b981;">🛰️ Analyse Satellite</span>
+                    <span class="status-badge-live done">Terminée</span>
+                </div>
+            </div>
+        `;
+    }
+
+    return `
+        <div class="analysis-status-container">
+            <div class="analysis-status-text">
+                <span>🛰️ ${status}</span>
+                <span class="status-badge-live active">${progress}%</span>
+            </div>
+            <div class="progress-track">
+                <div class="progress-fill" style="width: ${progress}%"></div>
+            </div>
+        </div>
+    `;
 }
 
 function renderRotationTimeline(history) {

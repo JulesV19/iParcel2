@@ -403,6 +403,59 @@
             font-weight: 700;
             color: #0f172a;
         }
+
+        /* Analysis Status */
+        .analysis-status-container {
+            margin-top: 15px;
+            padding: 12px;
+            background: #f1f5f9;
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .analysis-status-text {
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: #475569;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .progress-track {
+            height: 6px;
+            background: #e2e8f0;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--accent-gradient);
+            border-radius: 3px;
+            transition: width 0.4s ease;
+        }
+
+        .status-badge-live {
+            padding: 2px 6px;
+            border-radius: 6px;
+            font-size: 0.6rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .status-badge-live.active {
+            background: rgba(59, 130, 246, 0.1);
+            color: #3b82f6;
+            animation: pulse 2s infinite;
+        }
+
+        .status-badge-live.done {
+            background: rgba(16, 185, 129, 0.1);
+            color: #10b981;
+        }
     </style>
 </head>
 

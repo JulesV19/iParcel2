@@ -1,10 +1,10 @@
 // ── Satellite NDVI Viewer Module ──
-// Handles satellite imagery loading, NDVI computation, and overlay display.
+// Displays pre-computed NDVI/RGB images from backend (Supabase Storage).
+// No client-side NDVI computation — backend handles everything.
 
-import { fromUrl, Pool } from 'geotiff';
-import proj4 from 'proj4';
 import maplibregl from 'maplibre-gl';
 import * as turf from '@turf/turf';
+import Chart from 'chart.js/auto';
 import { basemaps } from '../shared/constants.js';
 
 // ── Dependencies injected via setDependencies ──
@@ -16,12 +16,12 @@ export function setDependencies(deps) {
     if (deps.satelliteMiniMap !== undefined) satelliteMiniMap = deps.satelliteMiniMap;
 }
 
-// Expose getter/setter for satelliteMiniMap since it is recreated internally
 export function getSatelliteMiniMap() { return satelliteMiniMap; }
 export function setSatelliteMiniMap(val) { satelliteMiniMap = val; }
 
 // ── Module-level state ──
 export let satelliteMiniMapReady = false;
+let ndviChart = null;
 
 export const satelliteState = {
     parcelId: null,
@@ -29,8 +29,6 @@ export const satelliteState = {
     year: 2023,
     month: '12',
     mode: 'ndvi',
-    maxClouds: 20, // Tolérance par défaut : 20%
-    maxSnow: 100,  // On ignore la neige par défaut
     cache: {},
     isLoading: false
 };
@@ -39,11 +37,9 @@ export const satelliteState = {
 export function changeSatelliteMode(mode) {
     satelliteState.mode = mode;
 
-    // Gérer l'affichage de la légende NDVI
     const legend = document.getElementById('satellite-legend');
     if (legend) legend.style.opacity = mode === 'ndvi' ? '1' : '0';
 
-    // Rafraîchir l'image actuelle si elle est en cache
     const cacheKey = `${satelliteState.year}-${satelliteState.month}`;
     if (satelliteState.cache[cacheKey] && satelliteState.cache[cacheKey] !== 'ERROR') {
         displayCachedSatelliteNDVI(cacheKey);
@@ -51,20 +47,18 @@ export function changeSatelliteMode(mode) {
 }
 
 /**
- * Initialise l'état Satellite pour la parcelle sélectionnée
+ * Initialise l'état Satellite pour la parcelle sélectionnée.
+ * Affiche les données pré-calculées depuis le backend ou un message d'analyse en cours.
  */
 export function initSatelliteViz(parcelId, feature, { exploitationParcelles }) {
-    // Si c'est déjà la même parcelle, on ne fait rien
     if (satelliteState.parcelId === parcelId) return;
 
     satelliteState.parcelId = parcelId;
     satelliteState.feature = feature;
-    satelliteState.cache = {}; // Reset cache for new parcel
+    satelliteState.cache = {};
 
-    // On nettoie la carte principale si un overlay existait
     clearSatelliteOverlay();
 
-    // Destruction/Recreation du mini-viewer satellite
     if (satelliteMiniMap) {
         satelliteMiniMap.remove();
         satelliteMiniMap = null;
@@ -75,22 +69,18 @@ export function initSatelliteViz(parcelId, feature, { exploitationParcelles }) {
     if (!container) return;
 
     // ── VÉRIFICATION EXPLOITATION ──
-    // On vérifie si la parcelle est dans l'exploitation de l'utilisateur
     const inExploitation = exploitationParcelles.find(p => p.parcel_id === parcelId);
     const placeholder = document.getElementById('satellite-placeholder');
     const statusEl = document.getElementById('satellite-status');
     const sliderEl = document.getElementById('satellite-viz-slider');
 
-    // Nettoyage message précédent
     const existingMsg = document.getElementById('sat-lock-message');
     if (existingMsg) existingMsg.remove();
 
     if (!inExploitation) {
-        // CAS : Parcelle non suivie
         if (placeholder) placeholder.classList.remove('hidden');
         if (statusEl) statusEl.innerText = "";
 
-        // Création du message de blocage
         const msgDiv = document.createElement('div');
         msgDiv.id = 'sat-lock-message';
         msgDiv.style.cssText = `
@@ -112,7 +102,6 @@ export function initSatelliteViz(parcelId, feature, { exploitationParcelles }) {
         container.style.position = 'relative';
         container.appendChild(msgDiv);
 
-        // Désactiver les contrôles
         if (sliderEl) sliderEl.disabled = true;
         return;
     }
@@ -121,15 +110,34 @@ export function initSatelliteViz(parcelId, feature, { exploitationParcelles }) {
     if (sliderEl) sliderEl.disabled = false;
     if (placeholder) placeholder.classList.remove('hidden');
 
-    // Charger les données depuis le stockage local (Supabase) si disponibles
-    if (inExploitation.ndvi_data && Object.keys(inExploitation.ndvi_data).length > 0) {
-        console.log("[Satellite] Chargement depuis le cache BDD");
-        satelliteState.cache = inExploitation.ndvi_data;
-        // Afficher directement l'image courante si dispo
-        const currentKey = `${satelliteState.year}-${satelliteState.month}`;
-        if (satelliteState.cache[currentKey] && satelliteState.cache[currentKey] !== 'ERROR') {
-            // On doit attendre que la minimap soit créée ci-dessous
-            setTimeout(() => displayCachedSatelliteNDVI(currentKey), 500);
+    // Charger les données pré-calculées depuis Supabase
+    const ndviData = inExploitation.ndvi_data;
+    const hasData = ndviData && typeof ndviData === 'object' && Object.keys(ndviData).length > 0;
+    const analysisInProgress = inExploitation.analysis_status && inExploitation.analysis_status !== 'Terminée' && inExploitation.analysis_status !== 'Erreur';
+
+    if (hasData) {
+        satelliteState.cache = ndviData;
+    }
+
+    // Show loader if analysis is in progress
+    const loader = document.getElementById('satellite-loader');
+    const loaderText = document.getElementById('satellite-loader-text');
+    const loaderBar = document.getElementById('satellite-loader-bar');
+
+    if (analysisInProgress) {
+        const progress = inExploitation.analysis_progress || 0;
+        if (loader) loader.classList.remove('hidden');
+        if (placeholder) placeholder.classList.add('hidden');
+        if (loaderText) loaderText.innerText = `${inExploitation.analysis_status || 'Analyse satellite...'} (${progress}%)`;
+        if (loaderBar) loaderBar.style.width = `${progress}%`;
+        if (statusEl) {
+            statusEl.innerText = `Analyse en cours... (${progress}%)`;
+            statusEl.style.color = '#f59e0b';
+        }
+    } else if (!hasData) {
+        if (statusEl) {
+            statusEl.innerText = "En attente d'analyse satellite...";
+            statusEl.style.color = '#94a3b8';
         }
     }
 
@@ -151,7 +159,6 @@ export function initSatelliteViz(parcelId, feature, { exploitationParcelles }) {
 
     satelliteMiniMap.on('load', () => {
         satelliteMiniMapReady = true;
-        // Ajouter le contour de la parcelle
         satelliteMiniMap.addSource('parcel-outline', {
             type: 'geojson',
             data: feature
@@ -163,92 +170,64 @@ export function initSatelliteViz(parcelId, feature, { exploitationParcelles }) {
             paint: { 'line-color': '#ffffff', 'line-width': 2 }
         });
 
-        // Si on a déjà des données en cache (depuis BDD), on affiche, sinon on lance le chargement
         const currentKey = `${satelliteState.year}-${satelliteState.month}`;
         if (satelliteState.cache[currentKey] && satelliteState.cache[currentKey] !== 'ERROR') {
             displayCachedSatelliteNDVI(currentKey);
-        } else {
-            // Si pas de données BDD, on lance le chargement live (cas de fallback ou nouvelle année)
-            satelliteVizLoadAll();
+        } else if (!hasData) {
+            if (statusEl) statusEl.innerText = analysisInProgress
+                ? `Analyse en cours... (${inExploitation.analysis_progress || 0}%)`
+                : "Aucune donnée satellite disponible.";
         }
+
+        renderNdviChart(satelliteState.cache);
     });
 }
 
 /**
- * Charge tous les mois de Janvier 2020 à Décembre 2023 séquentiellement.
- * Se lance automatiquement au clic via initSatelliteViz().
+ * Met à jour le cache et l'affichage quand le backend envoie de nouvelles données via realtime.
  */
-export async function satelliteVizLoadAll() {
-    if (satelliteState.isLoading) return;
+export function onNdviDataUpdated(parcelId, ndviData, analysisProgress, analysisStatus) {
+    if (satelliteState.parcelId !== parcelId) return;
 
+    const statusEl = document.getElementById('satellite-status');
     const loader = document.getElementById('satellite-loader');
     const loaderText = document.getElementById('satellite-loader-text');
     const loaderBar = document.getElementById('satellite-loader-bar');
-    const placeholder = document.getElementById('satellite-placeholder');
 
-    satelliteState.isLoading = true;
-    const targetParcelId = satelliteState.parcelId; // Sécurité si on change de parcelle en cours de route
-
-    if (loader) loader.classList.remove('hidden');
-    if (placeholder) placeholder.classList.add('hidden');
-
-    // Génération chronologique inversée (de Décembre 2023 à Janvier 2020)
-    const timepoints = [];
-    for (let y = 2023; y >= 2020; y--) {
-        for (let m = 12; m >= 1; m--) {
-            timepoints.push({ year: y, month: String(m).padStart(2, '0') });
-        }
+    if (ndviData && typeof ndviData === 'object') {
+        satelliteState.cache = ndviData;
     }
 
-    let loadedCount = 0;
-
-    for (const tp of timepoints) {
-        // Interruption si changement de parcelle
-        if (satelliteState.parcelId !== targetParcelId || !satelliteState.isLoading) break;
-
-        const progress = Math.round((loadedCount / timepoints.length) * 100);
-        if (loaderText) loaderText.innerText = `Analyse ${tp.month}/${tp.year}... (${progress}%)`;
-        if (loaderBar) loaderBar.style.width = `${progress}%`;
-
-        const cacheKey = `${tp.year}-${tp.month}`;
-
-        if (!satelliteState.cache[cacheKey]) {
-            try {
-                const result = await calcSatelliteNDVI(satelliteState.feature, tp.year, tp.month);
-                if (result) {
-                    satelliteState.cache[cacheKey] = result;
-                    if (satelliteState.year === tp.year && satelliteState.month === tp.month) {
-                        displayCachedSatelliteNDVI(cacheKey);
-                    }
-                }
-            } catch (err) {
-                console.warn(`[Satellite] Aucun pixel clair pour ${cacheKey}:`, err.message);
-                satelliteState.cache[cacheKey] = 'ERROR'; // On marque en erreur pour le slider
-                if (satelliteState.year === tp.year && satelliteState.month === tp.month) {
-                    document.getElementById('satellite-status').innerText = `❌ Image trop nuageuse pour ${tp.month}/${tp.year}.`;
-                }
-            }
-        }
-        loadedCount++;
-    }
-
-    // On s'assure qu'on est toujours sur la même parcelle avant de masquer le loader
-    if (satelliteState.parcelId === targetParcelId) {
+    if (analysisStatus === 'Terminée') {
+        // Hide loader
         if (loader) loader.classList.add('hidden');
-        satelliteState.isLoading = false;
 
-        const currentCacheKey = `${satelliteState.year}-${satelliteState.month}`;
-        if (satelliteState.cache[currentCacheKey]) {
-            displayCachedSatelliteNDVI(currentCacheKey);
-        } else {
-            document.getElementById('satellite-status').innerText = "Fin de l'analyse. Certaines dates sont trop nuageuses pour l'observation.";
+        const currentKey = `${satelliteState.year}-${satelliteState.month}`;
+        if (satelliteState.cache[currentKey] && satelliteState.cache[currentKey] !== 'ERROR') {
+            displayCachedSatelliteNDVI(currentKey);
+        } else if (statusEl) {
+            statusEl.innerText = "Analyse terminée.";
+            statusEl.style.color = '#10b981';
+        }
+    } else if (analysisProgress !== undefined) {
+        // Update loader
+        if (loader) loader.classList.remove('hidden');
+        if (loaderText) loaderText.innerText = `${analysisStatus || 'Analyse...'} (${analysisProgress}%)`;
+        if (loaderBar) loaderBar.style.width = `${analysisProgress}%`;
+
+        // Show newly available image if the user is looking at a month that just got computed
+        const currentKey = `${satelliteState.year}-${satelliteState.month}`;
+        if (satelliteState.cache[currentKey] && satelliteState.cache[currentKey] !== 'ERROR') {
+            displayCachedSatelliteNDVI(currentKey);
+        } else if (statusEl) {
+            statusEl.innerText = `Analyse en cours... (${analysisProgress}%)`;
+            statusEl.style.color = '#f59e0b';
         }
     }
+
+    renderNdviChart(satelliteState.cache);
 }
 
-/**
- * Affiche une image NDVI depuis le cache à l'aide de sa clé (ex: "2023-06")
- */
 export function clearSatelliteOverlayFromMiniMap() {
     if (satelliteMiniMap && satelliteMiniMapReady) {
         if (satelliteMiniMap.getLayer('sat-layer')) satelliteMiniMap.removeLayer('sat-layer');
@@ -256,7 +235,77 @@ export function clearSatelliteOverlayFromMiniMap() {
     }
 }
 
-export function displayCachedSatelliteNDVI(cacheKey) {
+// NDVI color stops for smooth gradient (same as backend used to have)
+const NDVI_STOPS = [-0.1, 0.1, 0.3, 0.5, 0.7, 0.9];
+const NDVI_COLORS = [
+    [207, 90, 90],    // red
+    [207, 90, 90],    // red
+    [241, 194, 67],   // yellow
+    [197, 216, 109],  // light green
+    [99, 163, 85],    // green
+    [30, 97, 42],     // dark green
+];
+
+// Build a 256-entry lookup table for fast colorization
+const ndviLUT = new Uint8Array(256 * 4);
+for (let i = 0; i < 256; i++) {
+    const ndvi = (i / 127.5) - 1.0; // reverse grayscale→NDVI mapping
+    let r, g, b;
+    if (ndvi <= NDVI_STOPS[0]) {
+        [r, g, b] = NDVI_COLORS[0];
+    } else if (ndvi >= NDVI_STOPS[NDVI_STOPS.length - 1]) {
+        [r, g, b] = NDVI_COLORS[NDVI_COLORS.length - 1];
+    } else {
+        // Find segment and interpolate
+        for (let s = 0; s < NDVI_STOPS.length - 1; s++) {
+            if (ndvi >= NDVI_STOPS[s] && ndvi < NDVI_STOPS[s + 1]) {
+                const t = (ndvi - NDVI_STOPS[s]) / (NDVI_STOPS[s + 1] - NDVI_STOPS[s]);
+                r = NDVI_COLORS[s][0] + t * (NDVI_COLORS[s + 1][0] - NDVI_COLORS[s][0]);
+                g = NDVI_COLORS[s][1] + t * (NDVI_COLORS[s + 1][1] - NDVI_COLORS[s][1]);
+                b = NDVI_COLORS[s][2] + t * (NDVI_COLORS[s + 1][2] - NDVI_COLORS[s][2]);
+                break;
+            }
+        }
+    }
+    ndviLUT[i * 4] = r;
+    ndviLUT[i * 4 + 1] = g;
+    ndviLUT[i * 4 + 2] = b;
+    ndviLUT[i * 4 + 3] = 255;
+}
+
+function colorizeNdviImage(imageUrl) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const pixels = imageData.data;
+
+            for (let i = 0; i < pixels.length; i += 4) {
+                const alpha = pixels[i + 3];
+                if (alpha === 0) continue; // keep transparent pixels
+                const gray = pixels[i]; // R=G=B in grayscale
+                const lutIdx = gray * 4;
+                pixels[i] = ndviLUT[lutIdx];
+                pixels[i + 1] = ndviLUT[lutIdx + 1];
+                pixels[i + 2] = ndviLUT[lutIdx + 2];
+                // keep original alpha
+            }
+
+            ctx.putImageData(imageData, 0, 0);
+            resolve(canvas.toDataURL('image/png'));
+        };
+        img.onerror = () => resolve(imageUrl); // fallback to raw
+        img.src = imageUrl;
+    });
+}
+
+export async function displayCachedSatelliteNDVI(cacheKey) {
     const data = satelliteState.cache[cacheKey];
     if (!data || data === 'ERROR' || !satelliteMiniMapReady) return;
 
@@ -269,8 +318,13 @@ export function displayCachedSatelliteNDVI(cacheKey) {
         satelliteMiniMap.removeSource('sat-source');
     }
 
-    // On choisit l'URL selon le mode sélectionné
-    const imageUrl = satelliteState.mode === 'rgb' ? data.rgbUrl : data.ndviUrl;
+    let imageUrl;
+    if (satelliteState.mode === 'rgb') {
+        imageUrl = data.rgbUrl;
+    } else {
+        // Colorize grayscale NDVI → gradient
+        imageUrl = await colorizeNdviImage(data.ndviUrl);
+    }
 
     satelliteMiniMap.addSource('sat-source', {
         type: 'image',
@@ -288,186 +342,6 @@ export function displayCachedSatelliteNDVI(cacheKey) {
     if (satelliteMiniMap.getLayer('parcel-outline-line')) {
         satelliteMiniMap.moveLayer('parcel-outline-line');
     }
-}
-
-/**
- * Alias pour le bouton Actualiser
- */
-export function satelliteVizLoadCurrent() {
-    satelliteVizLoadAll();
-}
-
-/**
- * Core Logic: STAC -> GeoTIFF -> NDVI -> Clipping -> MapLibre Overlay
- */
-export async function calcSatelliteNDVI(featureGeometry, year, month) {
-    const bboxWgs = turf.bbox(featureGeometry);
-    const startDate = `${year}-${month}-01T00:00:00Z`;
-    const lastDay = new Date(year, parseInt(month), 0).getDate();
-    const endDate = `${year}-${month}-${lastDay.toString().padStart(2, '0')}T23:59:59Z`;
-
-    // Construction dynamique de la requête STAC
-    const stacQuery = {
-        "eo:cloud_cover": { "lte": satelliteState.maxClouds } // less than or equal
-    };
-
-    // N'ajouter le filtre neige que s'il est restrictif pour ne pas alourdir la requête API
-    if (satelliteState.maxSnow < 100) {
-        stacQuery["s2:snow_ice_percentage"] = { "lte": satelliteState.maxSnow };
-    }
-
-    const stacUrl = "https://earth-search.aws.element84.com/v1/search";
-    const resp = await fetch(stacUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            collections: ["sentinel-2-l2a"],
-            bbox: bboxWgs,
-            datetime: `${startDate}/${endDate}`,
-            limit: 3,
-            query: stacQuery
-        })
-    });;
-
-    const data = await resp.json();
-    if (!data.features || data.features.length === 0) {
-        throw new Error("Aucune image sans nuages sur cette période.");
-    }
-
-    const stacFeature = data.features[0];
-    const acquisitionDate = new Date(stacFeature.properties.datetime).toLocaleDateString('fr-FR');
-
-    // Méta-données géospatiales depuis la bande rouge
-    const tiffB04 = await fromUrl(stacFeature.assets.red.href);
-    const imageB04 = await tiffB04.getImage();
-    let epsgCode = stacFeature.properties['proj:epsg'] || imageB04.geoKeys.ProjectedCSTypeGeoKey;
-    const origin = imageB04.getOrigin();
-    const res = imageB04.getResolution();
-    const transform = [res[0], 0, origin[0], 0, res[1], origin[1]];
-
-    const epsgDef = `EPSG:${epsgCode}`;
-    const zone = epsgCode % 100;
-    const isSouth = epsgCode >= 32700;
-    proj4.defs(epsgDef, `+proj=utm +zone=${zone} ${isSouth ? '+south ' : ''}+datum=WGS84 +units=m +no_defs`);
-
-    const pNW = proj4('EPSG:4326', epsgDef, [bboxWgs[0], bboxWgs[3]]);
-    const pSE = proj4('EPSG:4326', epsgDef, [bboxWgs[2], bboxWgs[1]]);
-    const margin = 20;
-
-    const pxL = Math.max(0, Math.floor((Math.min(pNW[0], pSE[0]) - margin - transform[2]) / transform[0]));
-    const pxR = Math.ceil((Math.max(pNW[0], pSE[0]) + margin - transform[2]) / transform[0]);
-    const pxT = Math.max(0, Math.floor((Math.max(pNW[1], pSE[1]) + margin - transform[5]) / transform[4]));
-    const pxB = Math.ceil((Math.min(pNW[1], pSE[1]) - margin - transform[5]) / transform[4]);
-
-    const windowArr = [pxL, pxT, pxR, pxB];
-    const rw = windowArr[2] - windowArr[0];
-    const rh = windowArr[3] - windowArr[1];
-
-    if (rw * rh > 2000 * 2000) throw new Error("Parcelle trop grande.");
-
-    // Chargement des 3 bandes : Rouge, Infrarouge (NDVI) et Visual (RGB)
-    const pool = new Pool();
-    const tiffB08 = await fromUrl(stacFeature.assets.nir.href);
-    const tiffVisual = await fromUrl(stacFeature.assets.visual.href);
-
-    const imageB08 = await tiffB08.getImage();
-    const imageVisual = await tiffVisual.getImage();
-
-    const rB04 = await imageB04.readRasters({ pool, window: windowArr });
-    const rB08 = await imageB08.readRasters({ pool, window: windowArr });
-    const rVisual = await imageVisual.readRasters({ pool, window: windowArr });
-
-    // --- 1. Génération NDVI ---
-    const offCanvasNdvi = document.createElement('canvas');
-    offCanvasNdvi.width = rw; offCanvasNdvi.height = rh;
-    const offCtxNdvi = offCanvasNdvi.getContext('2d');
-    const imgDataNdvi = offCtxNdvi.createImageData(rw, rh);
-
-    const redArr = rB04[0];
-    const nirArr = rB08[0];
-
-    let sumNdvi = 0;
-    let countNdvi = 0;
-
-    for (let i = 0; i < redArr.length; i++) {
-        const r = redArr[i], n = nirArr[i];
-        // On ignore les pixels noirs (0) souvent hors de l'image
-        if (r === 0 && n === 0) {
-            // Transparent
-            imgDataNdvi.data[i * 4 + 3] = 0;
-            continue;
-        }
-
-        const ndvi = (r + n > 0) ? (n - r) / (n + r) : 0;
-
-        // Stats (on exclut l'eau ou les valeurs aberrantes si besoin, ici simple)
-        sumNdvi += ndvi;
-        countNdvi++;
-
-        const color = getNdviColor(ndvi);
-        const idx = i * 4;
-        imgDataNdvi.data[idx] = color[0]; imgDataNdvi.data[idx + 1] = color[1];
-        imgDataNdvi.data[idx + 2] = color[2]; imgDataNdvi.data[idx + 3] = color[3];
-    }
-    offCtxNdvi.putImageData(imgDataNdvi, 0, 0);
-
-    const meanNdvi = countNdvi > 0 ? (sumNdvi / countNdvi).toFixed(3) : 0;
-
-    // --- 2. Génération Vraie Image (RGB) ---
-    const offCanvasRgb = document.createElement('canvas');
-    offCanvasRgb.width = rw; offCanvasRgb.height = rh;
-    const offCtxRgb = offCanvasRgb.getContext('2d');
-    const imgDataRgb = offCtxRgb.createImageData(rw, rh);
-
-    const rChan = rVisual[0], gChan = rVisual[1], bChan = rVisual[2];
-    for (let i = 0; i < rChan.length; i++) {
-        const idx = i * 4;
-        // Multiplié par 1.4 pour rehausser légèrement la luminosité naturelle de Sentinel-2
-        imgDataRgb.data[idx] = Math.min(255, rChan[i] * 1.4);
-        imgDataRgb.data[idx + 1] = Math.min(255, gChan[i] * 1.4);
-        imgDataRgb.data[idx + 2] = Math.min(255, bChan[i] * 1.4);
-        imgDataRgb.data[idx + 3] = 255;
-    }
-    offCtxRgb.putImageData(imgDataRgb, 0, 0);
-
-    // --- 3. Découpage exact (Clipping) ---
-    const utmLeft = transform[2] + windowArr[0] * transform[0];
-    const utmRight = transform[2] + windowArr[2] * transform[0];
-    const utmTop = transform[5] + windowArr[1] * transform[4];
-    const utmBottom = transform[5] + windowArr[3] * transform[4];
-
-    const nwWgs = proj4(epsgDef, 'EPSG:4326', [utmLeft, utmTop]);
-    const seWgs = proj4(epsgDef, 'EPSG:4326', [utmRight, utmBottom]);
-
-    const clipAndFilter = (sourceCanvas) => {
-        const finalCanvas = document.createElement('canvas');
-        finalCanvas.width = rw; finalCanvas.height = rh;
-        const ctx = finalCanvas.getContext('2d');
-        ctx.beginPath();
-        const geom = featureGeometry.geometry;
-        if (geom.type === 'Polygon') {
-            _drawSatPolygon(ctx, geom.coordinates, nwWgs, seWgs, rw, rh);
-        } else if (geom.type === 'MultiPolygon') {
-            geom.coordinates.forEach(poly => _drawSatPolygon(ctx, poly, nwWgs, seWgs, rw, rh));
-        }
-        ctx.clip();
-        ctx.filter = 'blur(1.2px)'; // Léger flou pour lisser les pixels 10m
-        ctx.drawImage(sourceCanvas, 0, 0);
-        return finalCanvas.toDataURL();
-    };
-
-    return {
-        ndviUrl: clipAndFilter(offCanvasNdvi),
-        rgbUrl: clipAndFilter(offCanvasRgb),
-        date: acquisitionDate,
-        mean: meanNdvi, // Ajout de la moyenne pour usage futur (courbes)
-        coordinates: [
-            [nwWgs[0], nwWgs[1]], // TL
-            [seWgs[0], nwWgs[1]], // TR
-            [seWgs[0], seWgs[1]], // BR
-            [nwWgs[0], seWgs[1]]  // BL
-        ]
-    };
 }
 
 /**
@@ -490,33 +364,88 @@ export function getNdviColor(val) {
     return [30, 97, 42, 255];
 }
 
-function _drawSatPolygon(ctx, rings, nw, se, w, h) {
-    rings.forEach(ring => {
-        ring.forEach((coord, i) => {
-            const x = (coord[0] - nw[0]) / (se[0] - nw[0]) * w;
-            const y = (nw[1] - coord[1]) / (nw[1] - se[1]) * h;
-            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-        });
-        ctx.closePath();
-    });
-}
-
 /**
- * Applique les filtres de nuages et de neige, vide le cache et relance la recherche.
- * Cette fonction doit être globale pour être appelée depuis le HTML.
+ * Rendu du graphique NDVI Evolution
  */
-export function applySatelliteFilters() {
-    // 1. Mettre à jour l'état
-    const cloudVal = document.getElementById('sat-filter-cloud')?.value;
-    const snowVal = document.getElementById('sat-filter-snow')?.value;
+export function renderNdviChart(cache) {
+    const ctx = document.getElementById('satellite-ndvi-chart');
+    if (!ctx) return;
 
-    if (cloudVal) satelliteState.maxClouds = parseInt(cloudVal);
-    if (snowVal) satelliteState.maxSnow = parseInt(snowVal);
+    // Extraire et trier les données
+    const dataPoints = Object.entries(cache)
+        .filter(([key, val]) => val !== 'ERROR' && typeof val === 'object' && val.mean !== undefined)
+        .map(([key, val]) => ({
+            key,
+            date: val.date ? new Date(val.date) : new Date(key + "-01"),
+            mean: val.mean
+        }))
+        .sort((a, b) => a.date - b.date);
 
-    // 2. Vider le cache car les critères ont changé
-    satelliteState.cache = {};
-    clearSatelliteOverlayFromMiniMap();
+    if (dataPoints.length === 0) {
+        if (ndviChart) {
+            ndviChart.destroy();
+            ndviChart = null;
+        }
+        return;
+    }
 
-    // 3. Relancer la recherche globale
-    satelliteVizLoadAll();
+    const labels = dataPoints.map(p => {
+        const d = p.date;
+        return d.toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' });
+    });
+    const values = dataPoints.map(p => p.mean);
+
+    if (ndviChart) {
+        ndviChart.data.labels = labels;
+        ndviChart.data.datasets[0].data = values;
+        ndviChart.update('none'); // Update without animation for smoothness
+    } else {
+        ndviChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'NDVI Moyen',
+                    data: values,
+                    borderColor: '#10b981',
+                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                    borderWidth: 2,
+                    pointRadius: 3,
+                    pointBackgroundColor: '#10b981',
+                    tension: 0.3,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false,
+                        callbacks: {
+                            label: (context) => `NDVI: ${context.parsed.y.toFixed(3)}`
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        min: 0,
+                        max: 1,
+                        ticks: { stepSize: 0.2 },
+                        grid: { color: 'rgba(0,0,0,0.05)' }
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: {
+                            maxRotation: 0,
+                            autoSkip: true,
+                            maxTicksLimit: 8
+                        }
+                    }
+                }
+            }
+        });
+    }
 }

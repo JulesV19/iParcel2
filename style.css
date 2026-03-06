@@ -2935,7 +2935,8 @@ body.dark-mode .score-metric-box .sm-val {
 .parcel-list-item {
     display: flex;
     align-items: center;
-    gap: 12px;
+    flex-wrap: wrap;
+    gap: 8px 12px;
     padding: 12px 14px;
     background: white;
     border: 1px solid var(--border-light);
@@ -3756,11 +3757,9 @@ body.dark-mode .sys-badge.acs {
 }
 /* ── Satellite Analysis Progress ── */
 .analysis-progress-container {
-    margin-top: 8px;
-    padding: 10px;
-    background: var(--bg-light);
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--border);
+    width: 100%;
+    padding: 8px 0 0 0;
+    border-top: 1px solid var(--border-light);
 }
 
 .analysis-status-text {
@@ -3786,6 +3785,5 @@ body.dark-mode .sys-badge.acs {
 }
 
 body.dark-mode .analysis-progress-container {
-    background: #0f172a;
     border-color: #334155;
 }

@@ -200,28 +200,60 @@ export function computeRotationScoreV3(entries, agronomicRules) {
         let transWeightSum = 0;
         let seasonChanges = 0;
 
-        for (let i = 0; i < weightedEntries.length - 1; i++) {
-            const curr = weightedEntries[i];
-            const prev = weightedEntries[i + 1];
-            const famCurr = _getFamily(curr);
-            const famPrev = _getFamily(prev);
+        // Group entries by year for mixture handling
+        const entriesByYear = {};
+        weightedEntries.forEach(e => {
+            if (!entriesByYear[e.y]) entriesByYear[e.y] = [];
+            entriesByYear[e.y].push(e);
+        });
+        const sortedYears = Object.keys(entriesByYear).map(Number).sort((a, b) => b - a);
 
-            const coeff = (TRANSITION_MATRIX[famPrev] && TRANSITION_MATRIX[famPrev][famCurr]) || 0;
-            const avgW = (curr.weight + prev.weight) / 2;
-            transSum += coeff * avgW;
-            transWeightSum += avgW;
+        for (let i = 0; i < sortedYears.length - 1; i++) {
+            const yrCurr = sortedYears[i];
+            const yrPrev = sortedYears[i + 1];
+            const currMixture = entriesByYear[yrCurr];
+            const prevMixture = entriesByYear[yrPrev];
 
-            // Season alternation bonus
-            const sCurr = _getSeason(curr);
-            const sPrev = _getSeason(prev);
+            // Normalize weights within each year to sum to 1.0 (for mixture internal logic)
+            // though we then multiply by temporal decay weight
+            const wCurrTotal = currMixture.reduce((sum, e) => sum + e.weight, 0);
+            const wPrevTotal = prevMixture.reduce((sum, e) => sum + e.weight, 0);
+            const avgYearlyWeight = (wCurrTotal + wPrevTotal) / 2;
 
-            if (coeff > 1.0) logs.push({ type: 'positive', label: 'Succession', change: '+', desc: `Excellente transition : ${CROP_FAMILIES[prev.c]?.name || prev.c} vers ${CROP_FAMILIES[curr.c]?.name || curr.c} (${prev.y}\u2192${curr.y}).` });
-            else if (coeff < 0.0) logs.push({ type: 'negative', label: 'Succession', change: '-', desc: `Succession d\u00e9conseill\u00e9e : ${CROP_FAMILIES[prev.c]?.name || prev.c} vers ${CROP_FAMILIES[curr.c]?.name || curr.c} (${prev.y}\u2192${curr.y}).` });
+            let yearTransitionSum = 0;
+            let yearSeasonSum = 0;
 
-            if (sCurr !== sPrev && sCurr !== "unknown" && sPrev !== "unknown"
-                && sCurr !== "rest" && sPrev !== "rest") {
-                seasonChanges += avgW;
+            for (const c of currMixture) {
+                for (const p of prevMixture) {
+                    const famCurr = _getFamily(c);
+                    const famPrev = _getFamily(p);
+                    const coeff = (TRANSITION_MATRIX[famPrev] && TRANSITION_MATRIX[famPrev][famCurr]) || 0;
+
+                    // Share = (pctCurr * pctPrev)
+                    const pCurr = c.weight / wCurrTotal;
+                    const pPrev = p.weight / wPrevTotal;
+                    const jointProb = pCurr * pPrev;
+
+                    yearTransitionSum += coeff * jointProb;
+
+                    // Season alternation
+                    const sCurr = _getSeason(c);
+                    const sPrev = _getSeason(p);
+                    if (sCurr !== sPrev && sCurr !== "unknown" && sPrev !== "unknown"
+                        && sCurr !== "rest" && sPrev !== "rest") {
+                        yearSeasonSum += jointProb;
+                    }
+
+                    if (jointProb > 0.3) {
+                        if (coeff > 1.0) logs.push({ type: 'positive', label: 'Succession', change: '+', desc: `Transition : ${CROP_FAMILIES[p.c]?.name || p.c} \u2192 ${CROP_FAMILIES[c.c]?.name || c.c} (${p.y}\u2192${c.y}).` });
+                        else if (coeff < 0.0) logs.push({ type: 'negative', label: 'Succession', change: '-', desc: `D\u00e9conseill\u00e9 : ${CROP_FAMILIES[p.c]?.name || p.c} \u2192 ${CROP_FAMILIES[c.c]?.name || c.c} (${p.y}\u2192${c.y}).` });
+                    }
+                }
             }
+
+            transSum += yearTransitionSum * avgYearlyWeight;
+            transWeightSum += avgYearlyWeight;
+            seasonChanges += yearSeasonSum * avgYearlyWeight;
         }
 
         // Normalize: matrix range is [-2.5, +2.0] -> map to [0, 80]

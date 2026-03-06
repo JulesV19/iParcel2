@@ -26,6 +26,19 @@ let renderScoreEvolutionChart = null;
 let spatialHeatmapMap = null;
 let scoreEvolutionChart = null;
 
+// Cover crop label lookup (codes D** from REF_CULTURES_DEROBEES)
+const _coverLabels = {
+    DBM: 'Brôme', DBR: 'Bourrache', DCF: 'Chou fourrager', DCM: 'Caméline', DCR: 'Cresson',
+    DCZ: 'Colza', DDC: 'Dactyle', DFL: 'Fléole', DFN: 'Fenugrec', DFT: 'Fétuque', DFV: 'Féverole',
+    DGS: 'Gesse', DLL: 'Lentille', DLN: 'Lin', DLP: 'Lupin', DLT: 'Lotier', DLZ: 'Luzerne',
+    DMD: 'Moutarde', DMH: 'Moha', DML: 'Millet', DMN: 'Minette', DMT: 'Mélilot', DNG: 'Nyger',
+    DNT: 'Navette', DNV: 'Navet', DPC: 'Pois chiche', DPH: 'Phacélie', DPS: 'Pois', DPT: 'Pâturin',
+    DRD: 'Radis', DRG: 'Ray-grass', DRQ: 'Roquette', DSD: 'Serradelle', DSF: 'Sorgho four.',
+    DSG: 'Seigle', DSH: 'Sous-semis', DSJ: 'Soja', DSN: 'Sainfoin', DSR: 'Sarrasin',
+    DTN: 'Tournesol', DTR: 'Trèfle', DVN: 'Avoine', DVS: 'Vesce', DXF: 'Festulolium',
+    ZZZ: 'Inconnu'
+};
+
 /**
  * Inject runtime dependencies that live in the main app scope.
  */
@@ -270,7 +283,7 @@ export function renderSiblings(siblings) {
 }
 
 // ── renderHistoryWithRecord ──
-export function renderHistoryWithRecord(parcelId, props, record) {
+export function renderHistoryWithRecord(parcelId, props, record, skipScoreUpdate = false) {
     const list = document.getElementById('history-list');
     const currentYearStr = document.getElementById('year-select').value;
     const currentYearNum = parseInt(currentYearStr);
@@ -441,22 +454,10 @@ export function renderHistoryWithRecord(parcelId, props, record) {
         });
     });
 
-    renderRotationScore(panelScoreResult);
-    // renderTimelineStrip(Object.values(annualData));
-
-    // Cover crop label lookup (codes D** from REF_CULTURES_DEROBEES)
-    const _coverLabels = {
-        DBM: 'Br\u00f4me', DBR: 'Bourrache', DCF: 'Chou fourrager', DCM: 'Cam\u00e9line', DCR: 'Cresson',
-        DCZ: 'Colza', DDC: 'Dactyle', DFL: 'Fl\u00e9ole', DFN: 'Fenugrec', DFT: 'F\u00e9tuque', DFV: 'F\u00e9verole',
-        DGS: 'Gesse', DLL: 'Lentille', DLN: 'Lin', DLP: 'Lupin', DLT: 'Lotier', DLZ: 'Luzerne',
-        DMD: 'Moutarde', DMH: 'Moha', DML: 'Millet', DMN: 'Minette', DMT: 'M\u00e9lilot', DNG: 'Nyger',
-        DNT: 'Navette', DNV: 'Navet', DPC: 'Pois chiche', DPH: 'Phac\u00e9lie', DPS: 'Pois', DPT: 'P\u00e2turin',
-        DRD: 'Radis', DRG: 'Ray-grass', DRQ: 'Roquette', DSD: 'Serradelle', DSF: 'Sorgho four.',
-        DSG: 'Seigle', DSH: 'Sous-semis', DSJ: 'Soja', DSN: 'Sainfoin', DSR: 'Sarrasin',
-        DTN: 'Tournesol', DTR: 'Tr\u00e8fle', DVN: 'Avoine', DVS: 'Vesce', DXF: 'Festulolium',
-        ZZZ: 'Inconnu'
-    };
-    renderScoreEvolutionChart(scoringEntries);
+    if (!skipScoreUpdate) {
+        renderRotationScore(panelScoreResult);
+        renderScoreEvolutionChart(scoringEntries);
+    }
 
     // Render vertical list
     let html = sortedYears.length === 0 ? `<p style="padding:0 0 12px;font-size:0.85rem;color:var(--text-muted);">Premi\u00e8re ann\u00e9e de suivi pour cette parcelle.</p>` : '';
@@ -755,14 +756,20 @@ export async function renderSpatialHeatmap(parcelId, feature, record, parcelRegi
                     if (valid.length > maxYears) maxYears = valid.length;
                 });
 
-                // ── 5b. Mettre \u00e0 jour le score principal ──
+                // ── 5b. Mettre à jour le score principal ──
                 const wAvg = (key) => totalArea > 0
                     ? zones.reduce((s, z) => s + ((z.score.details || {})[key] || 0) * z.areaM2, 0) / totalArea
                     : 0;
 
+                const wAvgMetric = (key) => totalArea > 0
+                    ? zones.reduce((s, z) => s + ((z.score.metrics || {})[key] || 0) * z.areaM2, 0) / totalArea
+                    : 0;
+
+                const biggestZone = [...zones].sort((a, b) => b.areaM2 - a.areaM2)[0];
+
                 renderRotationScore({
                     score: globalScore,
-                    label: globalScore > 80 ? 'Excellent' : globalScore > 60 ? 'Bon' : globalScore > 40 ? 'Moyen' : '\u00c0 risque',
+                    label: globalScore > 80 ? 'Excellent' : globalScore > 60 ? 'Bon' : globalScore > 40 ? 'Moyen' : 'À risque',
                     level: globalScore > 60 ? 'good' : globalScore > 40 ? 'moderate' : 'bad',
                     unique: allCrops.size,
                     total: maxYears,
@@ -773,14 +780,22 @@ export async function renderSpatialHeatmap(parcelId, feature, record, parcelRegi
                         coverage: Math.round(wAvg('coverage')),
                         varianceMalus: varianceMalus
                     },
-                    // Pour le logs et metrics, on prend le premier de la zone principale (la plus grande)
-                    logs: [...zones].sort((a, b) => b.areaM2 - a.areaM2)[0]?.score?.logs || [],
-                    metrics: [...zones].sort((a, b) => b.areaM2 - a.areaM2)[0]?.score?.metrics || {}
+                    metrics: {
+                        families: Math.round(wAvgMetric('families')),
+                        crops: Math.round(wAvgMetric('crops')),
+                        roots: parseFloat(wAvgMetric('roots').toFixed(1)),
+                        prairieStreak: Math.round(wAvgMetric('prairieStreak')),
+                        legumesPct: Math.round(wAvgMetric('legumesPct')),
+                        cerealsPct: Math.round(wAvgMetric('cerealsPct')),
+                        covers: Math.round(wAvgMetric('covers')),
+                        prairiePct: Math.round(wAvgMetric('prairiePct'))
+                    },
+                    logs: biggestZone?.score?.logs || []
                 });
 
-                // ── 5c. Rafra\u00eechir l'affichage de l'historique ──
-                // (On ne r\u00e9-injecte plus les cultures trouv\u00e9es spatialement car on veut rester fid\u00e8le au partitionnement RPG)
-                renderHistoryWithRecord(parcelId, feature.properties, record);
+                // ── 5c. Rafraîchir l'affichage de l'historique ──
+                // On passe skipScoreUpdate = true pour ne pas écraser le score spatial qu'on vient de rendre.
+                renderHistoryWithRecord(parcelId, feature.properties, record, true);
 
                 // ── 6. Affichage ──
                 // Convertir les couches de requ\u00eate en contours environnants pour l'ann\u00e9e courante,

@@ -149,6 +149,10 @@ async function onAuthSuccess() {
 }
 
 export async function logout() {
+    if (exploitationChannel) {
+        exploitationChannel.unsubscribe();
+        exploitationChannel = null;
+    }
     await sb.auth.signOut();
     currentUser = null;
     currentExploitation = null;
@@ -216,6 +220,8 @@ export async function renameExploitation(name) {
     currentExploitation.name = name;
 }
 
+let exploitationChannel = null;
+
 async function loadExploitationParcelles() {
     if (!currentExploitation) return;
     const { data } = await sb
@@ -224,27 +230,53 @@ async function loadExploitationParcelles() {
         .eq('exploitation_id', currentExploitation.id)
         .order('added_at', { ascending: false });
     exploitationParcelles = data || [];
+
+    // Subscribe to realtime updates for ALL parcels in this exploitation
+    subscribeToExploitationUpdates();
 }
 
-export async function generateNDVIHistory(feature) {
-    const history = {};
-    const ndviYears = [2023, 2022, 2021, 2020];
-    for (const year of ndviYears) {
-        for (let m = 1; m <= 12; m++) {
-            const monthStr = String(m).padStart(2, '0');
-            const cacheKey = `${year}-${monthStr}`;
-            try {
-                const calcFn = deps.calcSatelliteNDVI;
-                if (!calcFn) continue;
-                const result = await calcFn(feature, year, monthStr);
-                if (result) history[cacheKey] = result;
-            } catch (e) {
-                history[cacheKey] = 'ERROR';
-            }
-        }
+function subscribeToExploitationUpdates() {
+    // Unsubscribe from previous channel if any
+    if (exploitationChannel) {
+        exploitationChannel.unsubscribe();
+        exploitationChannel = null;
     }
-    return history;
+    if (!currentExploitation) return;
+
+    console.log('[Realtime] Subscribing to exploitation', currentExploitation.id);
+    exploitationChannel = sb.channel(`exploitation-${currentExploitation.id}`)
+        .on('postgres_changes', {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'exploitation_parcelles',
+            filter: `exploitation_id=eq.${currentExploitation.id}`
+        }, payload => {
+            console.log('[Realtime] Update received:', payload.new.parcel_id, payload.new.analysis_progress);
+            const updated = payload.new;
+            const parcelId = updated.parcel_id;
+
+            // Update local state
+            const p = exploitationParcelles.find(x => x.parcel_id === parcelId);
+            if (p) {
+                p.analysis_progress = updated.analysis_progress;
+                p.analysis_status = updated.analysis_status;
+                if (updated.ndvi_data) p.ndvi_data = updated.ndvi_data;
+            }
+
+            // Update satellite viewer
+            if (deps.onNdviDataUpdated) {
+                deps.onNdviDataUpdated(parcelId, updated.ndvi_data, updated.analysis_progress, updated.analysis_status);
+            }
+
+            // Update progress bar only (no full dashboard rebuild)
+            if (deps.updateParcelProgress) {
+                deps.updateParcelProgress(parcelId, updated.analysis_progress, updated.analysis_status);
+            }
+        })
+        .subscribe();
 }
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 export async function addParcelToExploitation(parcelId, props, lngLat, feature) {
     if (!currentExploitation) {
@@ -299,45 +331,15 @@ export async function addParcelToExploitation(parcelId, props, lngLat, feature) 
         const cropLabels = deps.cropLabels || {};
         showToast(`${cropLabels[props.CODE_CULTU] || props.CODE_CULTU || parcelId} ajoutée ✓`, '🏠');
 
-        // Backend NDVI generation
+        // Launch backend NDVI generation
         (async () => {
             try {
-                // Subscribe to realtime updates for this parcel
-                const channel = sb.channel(`parcel-analysis-${parcelId}`)
-                    .on('postgres_changes', {
-                        event: 'UPDATE',
-                        schema: 'public',
-                        table: 'exploitation_parcelles',
-                        filter: `parcel_id=eq.${parcelId}`
-                    }, payload => {
-                        const updated = payload.new;
-                        if (updated.analysis_progress !== undefined) {
-                            showToast(`${cropLabels[props.CODE_CULTU] || props.CODE_CULTU || parcelId} : ${updated.analysis_status} (${updated.analysis_progress}%)`, '🛰️');
-
-                            // Update local state and UI
-                            const p = exploitationParcelles.find(x => x.parcel_id === parcelId);
-                            if (p) {
-                                p.analysis_progress = updated.analysis_progress;
-                                p.analysis_status = updated.analysis_status;
-                                if (updated.ndvi_data) p.ndvi_data = updated.ndvi_data;
-                            }
-                            if (document.getElementById('dashboard-panel').classList.contains('open') && deps.updateDashboard) {
-                                deps.updateDashboard();
-                            }
-
-                            if (updated.analysis_progress === 100) {
-                                showToast(`${cropLabels[props.CODE_CULTU] || props.CODE_CULTU || parcelId} : Analyse terminée ✅`, '🚀');
-                                channel.unsubscribe();
-                            }
-                        }
-                    })
-                    .subscribe();
-
-                const layerId = feature.layer ? feature.layer.id : '';
-                const response = await fetch('http://localhost:8000/analyze', {
+                const { data: { session } } = await sb.auth.getSession();
+                const response = await fetch(`${API_URL}/analyze`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
+                        token: session?.access_token || null,
                         exploitation_id: currentExploitation.id,
                         parcel_id: parcelId,
                         feature: {
@@ -349,7 +351,6 @@ export async function addParcelToExploitation(parcelId, props, lngLat, feature) 
                 });
 
                 if (!response.ok) {
-                    channel.unsubscribe();
                     console.error('[Backend NDVI] API Error:', await response.text());
                 }
             } catch (bgErr) {
