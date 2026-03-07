@@ -206,6 +206,7 @@ async function main() {
     window.parcelVizPlay = parcelViz.parcelVizPlay;
     window.parcelVizPlay = parcelViz.parcelVizPlay;
     window.changeSatelliteMode = satellite.changeSatelliteMode;
+    window.changeChartIndex = satellite.changeChartIndex;
     window.toggle3D = map.toggle3D;
     window.geolocate = map.geolocate;
     window.clearFilters = legend.clearFilters;

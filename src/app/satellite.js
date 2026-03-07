@@ -1,6 +1,6 @@
-// ── Satellite NDVI Viewer Module ──
-// Displays pre-computed NDVI/RGB images from backend (Supabase Storage).
-// No client-side NDVI computation — backend handles everything.
+// ── Satellite Multi-Index Viewer Module ──
+// Displays pre-computed spectral index images from backend (Supabase Storage).
+// Supports NDVI, EVI, NDWI, NDMI, SAVI, NDRE, BSI + RGB.
 
 import maplibregl from 'maplibre-gl';
 import * as turf from '@turf/turf';
@@ -22,6 +22,7 @@ export function setSatelliteMiniMap(val) { satelliteMiniMap = val; }
 // ── Module-level state ──
 export let satelliteMiniMapReady = false;
 let ndviChart = null;
+let chartIndex = 'ndvi';
 
 export const satelliteState = {
     parcelId: null,
@@ -33,12 +34,133 @@ export const satelliteState = {
     isLoading: false
 };
 
-// Fonction appelée quand on clique sur les boutons radio
+// ── Index metadata: colors, labels, legends ──
+const INDEX_META = {
+    ndvi: {
+        label: 'NDVI',
+        legendTitle: 'NDVI — Santé de la végétation',
+        gradient: '#cf5a5a, #f1c243, #c5d86d, #63a355, #1e612a',
+        legendLow: 'Sol nu / Eau', legendMid: 'Vég. intermédiaire', legendHigh: 'Biomasse dense',
+        chartColor: '#10b981',
+        stops: [-0.1, 0.1, 0.3, 0.5, 0.7, 0.9],
+        colors: [[207,90,90],[207,90,90],[241,194,67],[197,216,109],[99,163,85],[30,97,42]],
+    },
+    evi: {
+        label: 'EVI',
+        legendTitle: 'EVI — Végétation amélioré',
+        gradient: '#cf5a5a, #f1c243, #c5d86d, #63a355, #1e612a',
+        legendLow: 'Faible', legendMid: 'Modéré', legendHigh: 'Dense',
+        chartColor: '#059669',
+        stops: [-0.1, 0.1, 0.3, 0.5, 0.7, 0.9],
+        colors: [[207,90,90],[207,90,90],[241,194,67],[197,216,109],[99,163,85],[30,97,42]],
+    },
+    ndwi: {
+        label: 'NDWI',
+        legendTitle: 'NDWI — Stress hydrique',
+        gradient: '#8B4513, #D2B48C, #f5f5f5, #87CEEB, #1E90FF',
+        legendLow: 'Sec / Végétation', legendMid: 'Neutre', legendHigh: 'Eau / Humide',
+        chartColor: '#3b82f6',
+        stops: [-0.5, -0.2, 0.0, 0.2, 0.5],
+        colors: [[139,69,19],[210,180,140],[245,245,245],[135,206,235],[30,144,255]],
+    },
+    ndmi: {
+        label: 'NDMI',
+        legendTitle: 'NDMI — Humidité des cultures',
+        gradient: '#cf5a5a, #f1c243, #f5f5dc, #87CEEB, #4169E1',
+        legendLow: 'Stress hydrique', legendMid: 'Normal', legendHigh: 'Bien hydraté',
+        chartColor: '#6366f1',
+        stops: [-0.5, -0.1, 0.1, 0.3, 0.6],
+        colors: [[207,90,90],[241,194,67],[245,245,220],[135,206,235],[65,105,225]],
+    },
+    savi: {
+        label: 'SAVI',
+        legendTitle: 'SAVI — Végétation ajustée au sol',
+        gradient: '#cf5a5a, #f1c243, #c5d86d, #63a355, #1e612a',
+        legendLow: 'Sol nu', legendMid: 'Vég. intermédiaire', legendHigh: 'Couvert dense',
+        chartColor: '#84cc16',
+        stops: [-0.1, 0.1, 0.3, 0.5, 0.7, 0.9],
+        colors: [[207,90,90],[207,90,90],[241,194,67],[197,216,109],[99,163,85],[30,97,42]],
+    },
+    ndre: {
+        label: 'NDRE',
+        legendTitle: 'NDRE — Chlorophylle / Azote',
+        gradient: '#f1c243, #c5d86d, #63a355, #1e612a, #0a3d12',
+        legendLow: 'Faible chlorophylle', legendMid: 'Modéré', legendHigh: 'Forte chlorophylle',
+        chartColor: '#16a34a',
+        stops: [-0.1, 0.1, 0.2, 0.4, 0.6, 0.8],
+        colors: [[241,194,67],[241,194,67],[197,216,109],[99,163,85],[30,97,42],[10,61,18]],
+    },
+    bsi: {
+        label: 'BSI',
+        legendTitle: 'BSI — Indice de sol nu',
+        gradient: '#1e612a, #63a355, #c5d86d, #D2B48C, #8B4513',
+        legendLow: 'Végétation dense', legendMid: 'Mixte', legendHigh: 'Sol nu',
+        chartColor: '#a16207',
+        stops: [-0.5, -0.2, 0.0, 0.2, 0.5],
+        colors: [[30,97,42],[99,163,85],[197,216,109],[210,180,140],[139,69,19]],
+    },
+};
+
+// ── Build LUTs for all indices ──
+const indexLUTs = {};
+for (const [name, meta] of Object.entries(INDEX_META)) {
+    const lut = new Uint8Array(256 * 4);
+    const stops = meta.stops;
+    const colors = meta.colors;
+    for (let i = 0; i < 256; i++) {
+        const val = (i / 127.5) - 1.0; // grayscale [0,255] → [-1, 1]
+        let r, g, b;
+        if (val <= stops[0]) {
+            [r, g, b] = colors[0];
+        } else if (val >= stops[stops.length - 1]) {
+            [r, g, b] = colors[colors.length - 1];
+        } else {
+            for (let s = 0; s < stops.length - 1; s++) {
+                if (val >= stops[s] && val < stops[s + 1]) {
+                    const t = (val - stops[s]) / (stops[s + 1] - stops[s]);
+                    r = colors[s][0] + t * (colors[s + 1][0] - colors[s][0]);
+                    g = colors[s][1] + t * (colors[s + 1][1] - colors[s][1]);
+                    b = colors[s][2] + t * (colors[s + 1][2] - colors[s][2]);
+                    break;
+                }
+            }
+        }
+        lut[i * 4] = r;
+        lut[i * 4 + 1] = g;
+        lut[i * 4 + 2] = b;
+        lut[i * 4 + 3] = 255;
+    }
+    indexLUTs[name] = lut;
+}
+
+function updateLegend(mode) {
+    const meta = INDEX_META[mode];
+    const legend = document.getElementById('satellite-legend');
+    if (!legend) return;
+
+    if (mode === 'rgb' || !meta) {
+        legend.style.opacity = '0';
+        return;
+    }
+    legend.style.opacity = '1';
+
+    const title = document.getElementById('satellite-legend-title');
+    const gradient = document.getElementById('satellite-legend-gradient');
+    const low = document.getElementById('satellite-legend-low');
+    const mid = document.getElementById('satellite-legend-mid');
+    const high = document.getElementById('satellite-legend-high');
+
+    if (title) title.textContent = meta.legendTitle;
+    if (gradient) gradient.style.background = `linear-gradient(to right, ${meta.gradient})`;
+    if (low) low.textContent = meta.legendLow;
+    if (mid) mid.textContent = meta.legendMid;
+    if (high) high.textContent = meta.legendHigh;
+}
+
+// Fonction appelée quand on change l'indice dans le dropdown
 export function changeSatelliteMode(mode) {
     satelliteState.mode = mode;
-
-    const legend = document.getElementById('satellite-legend');
-    if (legend) legend.style.opacity = mode === 'ndvi' ? '1' : '0';
+    updateLegend(mode);
 
     const cacheKey = `${satelliteState.year}-${satelliteState.month}`;
     if (satelliteState.cache[cacheKey] && satelliteState.cache[cacheKey] !== 'ERROR') {
@@ -46,9 +168,14 @@ export function changeSatelliteMode(mode) {
     }
 }
 
+// Fonction appelée quand on change l'indice du graphique
+export function changeChartIndex(index) {
+    chartIndex = index;
+    renderNdviChart(satelliteState.cache);
+}
+
 /**
  * Initialise l'état Satellite pour la parcelle sélectionnée.
- * Affiche les données pré-calculées depuis le backend ou un message d'analyse en cours.
  */
 export function initSatelliteViz(parcelId, feature, { exploitationParcelles }) {
     if (satelliteState.parcelId === parcelId) return;
@@ -93,7 +220,7 @@ export function initSatelliteViz(parcelId, feature, { exploitationParcelles }) {
             <div style="font-size: 2rem; margin-bottom: 10px;">🔒</div>
             <h3 style="margin: 0 0 5px 0; color: var(--text-main);">Données Satellite Verrouillées</h3>
             <p style="margin: 0 0 15px 0; color: var(--text-muted); font-size: 0.9rem;">
-                Ajoutez cette parcelle à votre exploitation pour accéder à l'historique NDVI.
+                Ajoutez cette parcelle à votre exploitation pour accéder aux indices spectraux.
             </p>
             <button class="auth-btn" style="width:auto; padding:8px 16px;" onclick="triggerAddParcel()">
                 + Ajouter à mon exploitation
@@ -199,7 +326,6 @@ export function onNdviDataUpdated(parcelId, ndviData, analysisProgress, analysis
     }
 
     if (analysisStatus === 'Terminée') {
-        // Hide loader
         if (loader) loader.classList.add('hidden');
 
         const currentKey = `${satelliteState.year}-${satelliteState.month}`;
@@ -210,12 +336,10 @@ export function onNdviDataUpdated(parcelId, ndviData, analysisProgress, analysis
             statusEl.style.color = '#10b981';
         }
     } else if (analysisProgress !== undefined) {
-        // Update loader
         if (loader) loader.classList.remove('hidden');
         if (loaderText) loaderText.innerText = `${analysisStatus || 'Analyse...'} (${analysisProgress}%)`;
         if (loaderBar) loaderBar.style.width = `${analysisProgress}%`;
 
-        // Show newly available image if the user is looking at a month that just got computed
         const currentKey = `${satelliteState.year}-${satelliteState.month}`;
         if (satelliteState.cache[currentKey] && satelliteState.cache[currentKey] !== 'ERROR') {
             displayCachedSatelliteNDVI(currentKey);
@@ -235,45 +359,8 @@ export function clearSatelliteOverlayFromMiniMap() {
     }
 }
 
-// NDVI color stops for smooth gradient (same as backend used to have)
-const NDVI_STOPS = [-0.1, 0.1, 0.3, 0.5, 0.7, 0.9];
-const NDVI_COLORS = [
-    [207, 90, 90],    // red
-    [207, 90, 90],    // red
-    [241, 194, 67],   // yellow
-    [197, 216, 109],  // light green
-    [99, 163, 85],    // green
-    [30, 97, 42],     // dark green
-];
-
-// Build a 256-entry lookup table for fast colorization
-const ndviLUT = new Uint8Array(256 * 4);
-for (let i = 0; i < 256; i++) {
-    const ndvi = (i / 127.5) - 1.0; // reverse grayscale→NDVI mapping
-    let r, g, b;
-    if (ndvi <= NDVI_STOPS[0]) {
-        [r, g, b] = NDVI_COLORS[0];
-    } else if (ndvi >= NDVI_STOPS[NDVI_STOPS.length - 1]) {
-        [r, g, b] = NDVI_COLORS[NDVI_COLORS.length - 1];
-    } else {
-        // Find segment and interpolate
-        for (let s = 0; s < NDVI_STOPS.length - 1; s++) {
-            if (ndvi >= NDVI_STOPS[s] && ndvi < NDVI_STOPS[s + 1]) {
-                const t = (ndvi - NDVI_STOPS[s]) / (NDVI_STOPS[s + 1] - NDVI_STOPS[s]);
-                r = NDVI_COLORS[s][0] + t * (NDVI_COLORS[s + 1][0] - NDVI_COLORS[s][0]);
-                g = NDVI_COLORS[s][1] + t * (NDVI_COLORS[s + 1][1] - NDVI_COLORS[s][1]);
-                b = NDVI_COLORS[s][2] + t * (NDVI_COLORS[s + 1][2] - NDVI_COLORS[s][2]);
-                break;
-            }
-        }
-    }
-    ndviLUT[i * 4] = r;
-    ndviLUT[i * 4 + 1] = g;
-    ndviLUT[i * 4 + 2] = b;
-    ndviLUT[i * 4 + 3] = 255;
-}
-
-function colorizeNdviImage(imageUrl) {
+function colorizeIndexImage(imageUrl, indexName) {
+    const lut = indexLUTs[indexName] || indexLUTs['ndvi'];
     return new Promise((resolve) => {
         const img = new Image();
         img.crossOrigin = 'anonymous';
@@ -288,19 +375,18 @@ function colorizeNdviImage(imageUrl) {
 
             for (let i = 0; i < pixels.length; i += 4) {
                 const alpha = pixels[i + 3];
-                if (alpha === 0) continue; // keep transparent pixels
-                const gray = pixels[i]; // R=G=B in grayscale
+                if (alpha === 0) continue;
+                const gray = pixels[i];
                 const lutIdx = gray * 4;
-                pixels[i] = ndviLUT[lutIdx];
-                pixels[i + 1] = ndviLUT[lutIdx + 1];
-                pixels[i + 2] = ndviLUT[lutIdx + 2];
-                // keep original alpha
+                pixels[i] = lut[lutIdx];
+                pixels[i + 1] = lut[lutIdx + 1];
+                pixels[i + 2] = lut[lutIdx + 2];
             }
 
             ctx.putImageData(imageData, 0, 0);
             resolve(canvas.toDataURL('image/png'));
         };
-        img.onerror = () => resolve(imageUrl); // fallback to raw
+        img.onerror = () => resolve(imageUrl);
         img.src = imageUrl;
     });
 }
@@ -311,19 +397,23 @@ export async function displayCachedSatelliteNDVI(cacheKey) {
 
     const status = document.getElementById('satellite-status');
     status.style.color = '#10b981';
-    status.innerText = `✅ Image affichée (${data.date}).`;
+    status.innerText = `Image affichée (${data.date}).`;
 
     if (satelliteMiniMap.getLayer('sat-layer')) {
         satelliteMiniMap.removeLayer('sat-layer');
         satelliteMiniMap.removeSource('sat-source');
     }
 
+    const mode = satelliteState.mode;
     let imageUrl;
-    if (satelliteState.mode === 'rgb') {
+
+    if (mode === 'rgb') {
         imageUrl = data.rgbUrl;
     } else {
-        // Colorize grayscale NDVI → gradient
-        imageUrl = await colorizeNdviImage(data.ndviUrl);
+        // Get the URL for the selected index
+        const urlKey = `${mode}Url`;
+        const rawUrl = data[urlKey] || data.ndviUrl;
+        imageUrl = await colorizeIndexImage(rawUrl, mode);
     }
 
     satelliteMiniMap.addSource('sat-source', {
@@ -365,20 +455,35 @@ export function getNdviColor(val) {
 }
 
 /**
- * Rendu du graphique NDVI Evolution
+ * Rendu du graphique d'évolution de l'indice sélectionné
  */
 export function renderNdviChart(cache) {
     const ctx = document.getElementById('satellite-ndvi-chart');
     if (!ctx) return;
 
+    const idx = chartIndex;
+    const meta = INDEX_META[idx];
+
     // Extraire et trier les données
     const dataPoints = Object.entries(cache)
-        .filter(([key, val]) => val !== 'ERROR' && typeof val === 'object' && val.mean !== undefined)
-        .map(([key, val]) => ({
-            key,
-            date: val.date ? new Date(val.date) : new Date(key + "-01"),
-            mean: val.mean
-        }))
+        .filter(([key, val]) => val !== 'ERROR' && typeof val === 'object')
+        .map(([key, val]) => {
+            // Support both old format (mean only) and new format (means object)
+            let meanVal;
+            if (val.means && val.means[idx] !== undefined) {
+                meanVal = val.means[idx];
+            } else if (idx === 'ndvi' && val.mean !== undefined) {
+                meanVal = val.mean;
+            } else {
+                return null;
+            }
+            return {
+                key,
+                date: val.date ? new Date(val.date) : new Date(key + "-01"),
+                mean: meanVal
+            };
+        })
+        .filter(p => p !== null)
         .sort((a, b) => a.date - b.date);
 
     if (dataPoints.length === 0) {
@@ -394,24 +499,30 @@ export function renderNdviChart(cache) {
         return d.toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' });
     });
     const values = dataPoints.map(p => p.mean);
+    const color = meta ? meta.chartColor : '#10b981';
+    const label = meta ? meta.label + ' Moyen' : 'Indice Moyen';
 
     if (ndviChart) {
         ndviChart.data.labels = labels;
         ndviChart.data.datasets[0].data = values;
-        ndviChart.update('none'); // Update without animation for smoothness
+        ndviChart.data.datasets[0].borderColor = color;
+        ndviChart.data.datasets[0].pointBackgroundColor = color;
+        ndviChart.data.datasets[0].backgroundColor = color + '1a';
+        ndviChart.data.datasets[0].label = label;
+        ndviChart.update('none');
     } else {
         ndviChart = new Chart(ctx, {
             type: 'line',
             data: {
                 labels: labels,
                 datasets: [{
-                    label: 'NDVI Moyen',
+                    label: label,
                     data: values,
-                    borderColor: '#10b981',
-                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                    borderColor: color,
+                    backgroundColor: color + '1a',
                     borderWidth: 2,
                     pointRadius: 3,
-                    pointBackgroundColor: '#10b981',
+                    pointBackgroundColor: color,
                     tension: 0.3,
                     fill: true
                 }]
@@ -425,15 +536,15 @@ export function renderNdviChart(cache) {
                         mode: 'index',
                         intersect: false,
                         callbacks: {
-                            label: (context) => `NDVI: ${context.parsed.y.toFixed(3)}`
+                            label: (context) => `${label}: ${context.parsed.y.toFixed(3)}`
                         }
                     }
                 },
                 scales: {
                     y: {
-                        min: 0,
+                        min: -1,
                         max: 1,
-                        ticks: { stepSize: 0.2 },
+                        ticks: { stepSize: 0.25 },
                         grid: { color: 'rgba(0,0,0,0.05)' }
                     },
                     x: {

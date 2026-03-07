@@ -628,21 +628,18 @@
                             style="font-size:1.4rem;font-weight:900;color:var(--accent-dark);">Décembre 2023</span>
                     </div>
 
-                    <div
-                        style="display:flex; justify-content: center; gap: 15px; margin-bottom: 15px; font-size: 0.85rem;">
-                        <label
-                            style="display:flex; align-items:center; gap:5px; cursor:pointer; margin:0; text-transform:none; font-weight:600; color:var(--text-main);">
-                            <input type="radio" name="sat-mode" value="ndvi" checked
-                                onchange="changeSatelliteMode('ndvi')"
-                                style="margin:0; width:auto; accent-color:var(--accent);">
-                            Indice NDVI
-                        </label>
-                        <label
-                            style="display:flex; align-items:center; gap:5px; cursor:pointer; margin:0; text-transform:none; font-weight:600; color:var(--text-main);">
-                            <input type="radio" name="sat-mode" value="rgb" onchange="changeSatelliteMode('rgb')"
-                                style="margin:0; width:auto; accent-color:var(--accent);">
-                            Vraie Image (RGB)
-                        </label>
+                    <div style="display:flex; justify-content:center; margin-bottom:15px;">
+                        <select id="sat-mode-select" onchange="changeSatelliteMode(this.value)"
+                            style="padding:6px 12px; border-radius:var(--radius-sm); border:1px solid var(--border); font-size:0.85rem; font-weight:600; color:var(--text-main); background:var(--bg-card); cursor:pointer; min-width:200px;">
+                            <option value="ndvi" selected>NDVI — Vigueur végétation</option>
+                            <option value="evi">EVI — Végétation amélioré</option>
+                            <option value="ndwi">NDWI — Stress hydrique</option>
+                            <option value="ndmi">NDMI — Humidité cultures</option>
+                            <option value="savi">SAVI — Végétation (sol nu)</option>
+                            <option value="ndre">NDRE — Chlorophylle / Azote</option>
+                            <option value="bsi">BSI — Sol nu</option>
+                            <option value="rgb">RGB — Vraie image</option>
+                        </select>
                     </div>
 
                     <input type="range" id="satellite-viz-slider" min="0" max="47" value="47" step="1"
@@ -688,28 +685,39 @@
                 </div>
 
                 <div id="satellite-legend" style="margin-top:10px; transition: opacity 0.3s;">
-                    <div style="font-size:0.75rem; font-weight:600; margin-bottom:5px; color:var(--text-main);">Légende
-                        NDVI (Santé de la végétation)</div>
-                    <div
+                    <div id="satellite-legend-title" style="font-size:0.75rem; font-weight:600; margin-bottom:5px; color:var(--text-main);">NDVI — Santé de la végétation</div>
+                    <div id="satellite-legend-gradient"
                         style="display: flex; align-items: center; justify-content: space-between; background: linear-gradient(to right, #cf5a5a, #f1c243, #c5d86d, #63a355, #1e612a); height: 10px; border-radius: 4px;">
                     </div>
                     <div
                         style="display: flex; justify-content: space-between; font-size: 0.65rem; color: var(--text-muted); margin-top: 4px;">
-                        <span>Sol nu / Eau</span>
-                        <span>Vég. intermédiaire</span>
-                        <span>Biomasse dense</span>
+                        <span id="satellite-legend-low">Sol nu / Eau</span>
+                        <span id="satellite-legend-mid">Vég. intermédiaire</span>
+                        <span id="satellite-legend-high">Biomasse dense</span>
                     </div>
                 </div>
 
-                <!-- ── NDVI Evolution Chart ── -->
+                <!-- ── Index Evolution Chart ── -->
                 <div style="margin-top: 20px;">
-                    <label style="margin-bottom: 8px; display: block;">📈 Évolution du NDVI moyen</label>
+                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+                        <label style="margin:0;">📈 Évolution des indices</label>
+                        <select id="chart-index-select" onchange="changeChartIndex(this.value)"
+                            style="padding:3px 8px; border-radius:var(--radius-sm); border:1px solid var(--border); font-size:0.75rem; background:var(--bg-card); cursor:pointer;">
+                            <option value="ndvi" selected>NDVI</option>
+                            <option value="evi">EVI</option>
+                            <option value="ndwi">NDWI</option>
+                            <option value="ndmi">NDMI</option>
+                            <option value="savi">SAVI</option>
+                            <option value="ndre">NDRE</option>
+                            <option value="bsi">BSI</option>
+                        </select>
+                    </div>
                     <div class="chart-container"
                         style="height: 180px; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px; background: white;">
                         <canvas id="satellite-ndvi-chart"></canvas>
                     </div>
                     <p style="font-size: 0.65rem; color: var(--text-muted); margin-top: 6px; text-align: center;">
-                        Moyenne spatiale de l'indice de vigueur de la végétation sur la parcelle.
+                        Moyenne spatiale de l'indice sélectionné sur la parcelle.
                     </p>
                 </div>
             </div>

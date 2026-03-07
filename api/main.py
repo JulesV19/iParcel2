@@ -53,6 +53,64 @@ STORAGE_BUCKET = "ndvi-images"
 # Note: The storage bucket 'ndvi-images' must be created manually
 # in the Supabase dashboard as a public bucket (RLS prevents auto-creation).
 
+# ── Sentinel-2 bands to download ──
+# Extra bands beyond red/nir needed for spectral indices
+EXTRA_BANDS = {
+    "blue":      "blue",       # B02 - 10m
+    "green":     "green",      # B03 - 10m
+    "rededge1":  "rededge1",   # B05 - 20m
+    "swir16":    "swir16",     # B11 - 20m
+}
+
+# ── Spectral index definitions ──
+INDICES = {
+    "ndvi": {
+        "formula": lambda b: safe_ratio(b["nir"] - b["red"], b["nir"] + b["red"]),
+        "range": (-1, 1),
+    },
+    "evi": {
+        "formula": lambda b: np.clip(2.5 * safe_ratio(
+            b["nir"] - b["red"],
+            b["nir"] + 6.0 * b["red"] - 7.5 * b["blue"] + 10000.0
+        ), -1, 1),
+        "range": (-1, 1),
+    },
+    "ndwi": {
+        "formula": lambda b: safe_ratio(b["green"] - b["nir"], b["green"] + b["nir"]),
+        "range": (-1, 1),
+    },
+    "ndmi": {
+        "formula": lambda b: safe_ratio(b["nir"] - b["swir16"], b["nir"] + b["swir16"]),
+        "range": (-1, 1),
+    },
+    "savi": {
+        "formula": lambda b: np.clip(
+            safe_ratio(b["nir"] - b["red"], b["nir"] + b["red"] + 0.5) * 1.5,
+            -1, 1
+        ),
+        "range": (-1, 1),
+    },
+    "ndre": {
+        "formula": lambda b: safe_ratio(b["nir"] - b["rededge1"], b["nir"] + b["rededge1"]),
+        "range": (-1, 1),
+    },
+    "bsi": {
+        "formula": lambda b: safe_ratio(
+            (b["swir16"] + b["red"]) - (b["nir"] + b["blue"]),
+            (b["swir16"] + b["red"]) + (b["nir"] + b["blue"])
+        ),
+        "range": (-1, 1),
+    },
+}
+
+
+def safe_ratio(num, denom):
+    """Compute num/denom avoiding division by zero."""
+    d = denom.copy()
+    d[d == 0] = 1e-9
+    return num / d
+
+
 class AnalyzeRequest(BaseModel):
     token: str = None
     exploitation_id: str
@@ -60,16 +118,14 @@ class AnalyzeRequest(BaseModel):
     feature: dict
 
 
-def ndvi_to_grayscale_rgba(ndvi, parcel_mask):
-    """Convert raw NDVI (-1..1) to grayscale RGBA, clipped to parcel.
-    Maps NDVI linearly to 0-255 so the frontend can apply its own colormap."""
-    h, w = ndvi.shape
+def index_to_grayscale_rgba(values, parcel_mask, val_range=(-1, 1)):
+    """Convert index array to grayscale RGBA, clipped to parcel.
+    Maps values linearly from val_range to [0, 255]."""
+    h, w = values.shape
     rgba = np.zeros((h, w, 4), dtype=np.uint8)
-
-    valid = parcel_mask & ~np.isnan(ndvi)
-    # Map NDVI from [-1, 1] to [0, 255]
-    gray = np.clip((ndvi + 1.0) * 127.5, 0, 255).astype(np.uint8)
-
+    valid = parcel_mask & ~np.isnan(values)
+    lo, hi = val_range
+    gray = np.clip((values - lo) / (hi - lo) * 255, 0, 255).astype(np.uint8)
     rgba[:, :, 0] = gray
     rgba[:, :, 1] = gray
     rgba[:, :, 2] = gray
@@ -100,8 +156,23 @@ def upload_to_storage(png_bytes: bytes, path: str) -> str:
     return res
 
 
+def reproject_band(src, out_shape, dst_transform, dst_crs, resampling=Resampling.bilinear):
+    """Reproject a single band to match the reference grid."""
+    arr = np.zeros(out_shape, dtype=np.float32)
+    reproject(
+        source=rasterio.band(src, 1),
+        destination=arr,
+        src_transform=src.transform,
+        src_crs=src.crs,
+        dst_transform=dst_transform,
+        dst_crs=dst_crs,
+        resampling=resampling,
+    )
+    return arr
+
+
 async def calc_ndvi_timepoint(client: Client, feature_geom, year, month, exploitation_id, parcel_id):
-    """Calculate NDVI for a single month, upload images to Storage, return metadata."""
+    """Calculate spectral indices for a single month, upload images to Storage, return metadata."""
     bbox_wgs = feature_geom.bounds
     start_date = f"{year}-{month}-01T00:00:00Z"
     last_day = 31 if int(month) in [1,3,5,7,8,10,12] else 30 if int(month) != 2 else 28
@@ -152,18 +223,8 @@ async def calc_ndvi_timepoint(client: Client, feature_geom, year, month, exploit
                 if scl_url:
                     try:
                         with rasterio.open(scl_url) as src_scl:
-                            scl = np.zeros(out_shape, dtype=np.float32)
-                            reproject(
-                                source=rasterio.band(src_scl, 1),
-                                destination=scl,
-                                src_transform=src_scl.transform,
-                                src_crs=src_scl.crs,
-                                dst_transform=red_transform,
-                                dst_crs=src_red.crs,
-                                resampling=Resampling.nearest
-                            )
+                            scl = reproject_band(src_scl, out_shape, red_transform, src_red.crs, Resampling.nearest)
                             scl_int = scl.astype(np.uint8)
-                            # SCL classes: 8=cloud_medium, 9=cloud_high, 10=thin_cirrus, 3=cloud_shadow
                             cloud_classes = np.isin(scl_int, [3, 8, 9, 10])
                             parcel_pixels = np.sum(parcel_mask)
                             if parcel_pixels > 0:
@@ -177,18 +238,25 @@ async def calc_ndvi_timepoint(client: Client, feature_geom, year, month, exploit
                 if parcel_cloud_pct < best_cloud_pct:
                     best_cloud_pct = parcel_cloud_pct
 
+                    # ── Download NIR ──
                     with rasterio.open(nir_url) as src_nir:
-                        nir = np.zeros(out_shape, dtype=np.float32)
-                        reproject(
-                            source=rasterio.band(src_nir, 1),
-                            destination=nir,
-                            src_transform=src_nir.transform,
-                            src_crs=src_nir.crs,
-                            dst_transform=red_transform,
-                            dst_crs=src_red.crs,
-                            resampling=Resampling.bilinear
-                        )
+                        nir = reproject_band(src_nir, out_shape, red_transform, src_red.crs)
 
+                    # ── Download extra bands (B02, B03, B05, B11) ──
+                    extra_bands = {}
+                    for band_key, asset_key in EXTRA_BANDS.items():
+                        band_url = assets.get(asset_key, {}).get("href") if asset_key in assets else None
+                        if band_url:
+                            try:
+                                with rasterio.open(band_url) as src_band:
+                                    extra_bands[band_key] = reproject_band(src_band, out_shape, red_transform, src_red.crs)
+                            except Exception as e:
+                                print(f"  Band {band_key} download failed: {e}")
+                                extra_bands[band_key] = np.zeros(out_shape, dtype=np.float32)
+                        else:
+                            extra_bands[band_key] = np.zeros(out_shape, dtype=np.float32)
+
+                    # ── Download visual RGB ──
                     visual_url = assets["visual"]["href"]
                     with rasterio.open(visual_url) as src_vis:
                         vis = np.zeros((3, *out_shape), dtype=np.float32)
@@ -205,6 +273,7 @@ async def calc_ndvi_timepoint(client: Client, feature_geom, year, month, exploit
 
                     best_result = {
                         "red": red, "nir": nir, "vis": vis,
+                        "extra_bands": extra_bands,
                         "parcel_mask": parcel_mask, "red_transform": red_transform,
                         "epsg_code": epsg_code, "stac_feature": stac_feature,
                         "out_shape": out_shape
@@ -226,37 +295,62 @@ async def calc_ndvi_timepoint(client: Client, feature_geom, year, month, exploit
     red = best_result["red"]
     nir = best_result["nir"]
     vis = best_result["vis"]
+    extra_bands = best_result["extra_bands"]
     parcel_mask = best_result["parcel_mask"]
     red_transform = best_result["red_transform"]
     epsg_code = best_result["epsg_code"]
     stac_feature = best_result["stac_feature"]
     out_shape = best_result["out_shape"]
 
-    # Compute NDVI
-    denom = (nir + red)
-    denom[denom == 0] = 1e-9
-    ndvi = (nir - red) / denom
+    # ── Build band dict for index computation ──
+    bands = {
+        "red": red,
+        "nir": nir,
+        "blue": extra_bands.get("blue", np.zeros(out_shape, dtype=np.float32)),
+        "green": extra_bands.get("green", np.zeros(out_shape, dtype=np.float32)),
+        "rededge1": extra_bands.get("rededge1", np.zeros(out_shape, dtype=np.float32)),
+        "swir16": extra_bands.get("swir16", np.zeros(out_shape, dtype=np.float32)),
+    }
 
-    # Generate raw NDVI grayscale image (clipped to parcel)
-    h, w = ndvi.shape
-    ndvi_rgba = ndvi_to_grayscale_rgba(ndvi, parcel_mask)
+    # ── Compute all indices, generate PNGs, upload ──
+    cache_key = f"{year}-{month}"
+    base_path = f"{exploitation_id}/{parcel_id}/{cache_key}"
+    result = {}
+    means = {}
 
-    # Generate RGB Image (clipped to parcel)
+    for idx_name, idx_def in INDICES.items():
+        try:
+            values = idx_def["formula"](bands)
+            val_range = idx_def["range"]
+
+            # Mean over parcel
+            if np.any(parcel_mask):
+                valid_vals = values[parcel_mask]
+                valid_vals = valid_vals[~np.isnan(valid_vals)]
+                means[idx_name] = float(np.mean(valid_vals)) if len(valid_vals) > 0 else 0.0
+            else:
+                means[idx_name] = 0.0
+
+            # Generate grayscale PNG
+            rgba = index_to_grayscale_rgba(values, parcel_mask, val_range)
+            png_bytes = array_to_png_bytes(rgba)
+            url = upload_to_storage(png_bytes, f"{base_path}_{idx_name}.png")
+            result[f"{idx_name}Url"] = url
+        except Exception as e:
+            print(f"  Index {idx_name} failed: {e}")
+            means[idx_name] = 0.0
+
+    # ── RGB image ──
+    h, w = out_shape
     rgb_rgba = np.zeros((h, w, 4), dtype=np.uint8)
     for b in range(3):
         rgb_rgba[:, :, b] = np.clip(vis[b], 0, 255).astype(np.uint8)
     rgb_rgba[parcel_mask, 3] = 255
     rgb_rgba[~parcel_mask, 3] = 0
-
-    # Upload to Supabase Storage
-    cache_key = f"{year}-{month}"
-    base_path = f"{exploitation_id}/{parcel_id}/{cache_key}"
-    ndvi_png = array_to_png_bytes(ndvi_rgba)
     rgb_png = array_to_png_bytes(rgb_rgba)
-    ndvi_url = upload_to_storage(ndvi_png, f"{base_path}_ndvi.png")
     rgb_url = upload_to_storage(rgb_png, f"{base_path}_rgb.png")
 
-    # Calculate WGS84 corners for MapLibre image source
+    # ── WGS84 corners for MapLibre ──
     inv_transformer = Transformer.from_crs(f"EPSG:{epsg_code}", "EPSG:4326", always_xy=True)
 
     def px_to_wgs(px, py):
@@ -271,10 +365,11 @@ async def calc_ndvi_timepoint(client: Client, feature_geom, year, month, exploit
     ]
 
     return {
-        "ndviUrl": ndvi_url,
+        **result,
         "rgbUrl": rgb_url,
         "date": stac_feature["properties"]["datetime"],
-        "mean": float(np.mean(ndvi[parcel_mask])) if np.any(parcel_mask) else 0.0,
+        "mean": means.get("ndvi", 0.0),
+        "means": means,
         "coordinates": coords
     }
 
